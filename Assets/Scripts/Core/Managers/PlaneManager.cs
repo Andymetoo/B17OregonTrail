@@ -207,4 +207,23 @@ public class PlaneManager : MonoBehaviour
 
         return sectionAlive && systemOk;
     }
+
+    public void DebugDamageSection(string sectionId)
+    {
+        var section = GetSection(sectionId);
+        if (section == null)
+        {
+            Debug.LogWarning($"[Plane] DebugDamageSection: no section with id {sectionId}");
+            return;
+        }
+
+        section.Integrity = Mathf.Max(0, section.Integrity - 50);
+        section.OnFire = true;
+
+        Debug.Log($"[Plane] Debug damaged {sectionId}: integrity={section.Integrity}, onFire={section.OnFire}");
+
+        // If you have an event, raise it here, e.g.:
+        // OnSectionStateChanged?.Invoke(section);
+    }
+
 }

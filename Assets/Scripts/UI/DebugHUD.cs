@@ -55,7 +55,15 @@ public class DebugHUD : MonoBehaviour
     {
         if (CrewManager.Instance == null) return;
 
-        var crew = CrewManager.Instance.GetCrewById(watchedCrewId);
+        // Prefer currently selected crew, fall back to watchedCrewId
+        string idToShow = watchedCrewId;
+        if (OrdersUIController.Instance != null &&
+            !string.IsNullOrEmpty(OrdersUIController.Instance.SelectedCrewId))
+        {
+            idToShow = OrdersUIController.Instance.SelectedCrewId;
+        }
+
+        var crew = CrewManager.Instance.GetCrewById(idToShow);
         if (crew == null)
         {
             crewNameText.text = "Crew: (not found)";
@@ -81,6 +89,7 @@ public class DebugHUD : MonoBehaviour
             crewActionText.text = "Action: Idle";
         }
     }
+
 
     // --------------------
     // BUTTON HOOKS
