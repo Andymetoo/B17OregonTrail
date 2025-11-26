@@ -25,9 +25,11 @@ public class OrdersUIController : MonoBehaviour
     [SerializeField] private string selectedCrewId;
     [SerializeField] private PendingOrderType pendingOrder = PendingOrderType.None;
     [SerializeField] private string pendingTargetId;
+    [SerializeField] private string lastInspectedSectionId;
 
     public string SelectedCrewId => selectedCrewId;
     public PendingOrderType PendingOrder => pendingOrder;
+    public string LastInspectedSectionId => lastInspectedSectionId;
 
     private void Awake()
     {
@@ -52,57 +54,28 @@ public class OrdersUIController : MonoBehaviour
         Debug.Log($"[OrdersUI] Selected crew: {selectedCrewId}");
     }
 
-    public void OnActionClicked_Move()
+    /// <summary>
+    /// Unified method for action buttons - can be called directly from UI with enum parameter
+    /// </summary>
+    public void OnActionClicked(PendingOrderType orderType)
     {
         if (string.IsNullOrEmpty(selectedCrewId))
         {
-            Debug.Log("[OrdersUI] No crew selected for Move.");
+            Debug.Log($"[OrdersUI] No crew selected for {orderType}.");
             return;
         }
 
-        pendingOrder = PendingOrderType.Move;
+        pendingOrder = orderType;
         pendingTargetId = null;
-        Debug.Log($"[OrdersUI] Pending order: Move for {selectedCrewId}");
+        Debug.Log($"[OrdersUI] Pending order: {orderType} for {selectedCrewId}");
     }
 
-    public void OnActionClicked_Extinguish()
-    {
-        if (string.IsNullOrEmpty(selectedCrewId))
-        {
-            Debug.Log("[OrdersUI] No crew selected for Extinguish.");
-            return;
-        }
-
-        pendingOrder = PendingOrderType.ExtinguishFire;
-        pendingTargetId = null;
-        Debug.Log($"[OrdersUI] Pending order: ExtinguishFire for {selectedCrewId}");
-    }
-
-    public void OnActionClicked_Repair()
-    {
-        if (string.IsNullOrEmpty(selectedCrewId))
-        {
-            Debug.Log("[OrdersUI] No crew selected for Repair.");
-            return;
-        }
-
-        pendingOrder = PendingOrderType.RepairSystem;
-        pendingTargetId = null;
-        Debug.Log($"[OrdersUI] Pending order: RepairSystem for {selectedCrewId}");
-    }
-
-    public void OnActionClicked_Treat()
-    {
-        if (string.IsNullOrEmpty(selectedCrewId))
-        {
-            Debug.Log("[OrdersUI] No crew selected for Treat.");
-            return;
-        }
-
-        pendingOrder = PendingOrderType.TreatInjury;
-        pendingTargetId = null;
-        Debug.Log($"[OrdersUI] Pending order: TreatInjury for {selectedCrewId}");
-    }
+    // Legacy methods - kept for compatibility if any UI buttons still reference them
+    // New UI buttons should use OnActionClicked(PendingOrderType) instead
+    public void OnActionClicked_Move() => OnActionClicked(PendingOrderType.Move);
+    public void OnActionClicked_Extinguish() => OnActionClicked(PendingOrderType.ExtinguishFire);
+    public void OnActionClicked_Repair() => OnActionClicked(PendingOrderType.RepairSystem);
+    public void OnActionClicked_Treat() => OnActionClicked(PendingOrderType.TreatInjury);
 
     /// <summary>
     /// Called when the player clicks a target:
@@ -113,9 +86,11 @@ public class OrdersUIController : MonoBehaviour
     /// </summary>
     public void OnTargetClicked(string targetId)
     {
+        // If we don't have a pending order, treat this as an inspect
         if (pendingOrder == PendingOrderType.None)
         {
-            Debug.Log("[OrdersUI] No pending order when target clicked.");
+            lastInspectedSectionId = targetId;
+            Debug.Log($"[OrdersUI] Inspecting section: {targetId}");
             return;
         }
 

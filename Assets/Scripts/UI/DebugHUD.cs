@@ -55,15 +55,38 @@ public class DebugHUD : MonoBehaviour
     {
         if (CrewManager.Instance == null) return;
 
-        // Prefer currently selected crew, fall back to watchedCrewId
-        string idToShow = watchedCrewId;
+        // Prefer showing selected crew if there is one
+        string crewIdToShow = null;
         if (OrdersUIController.Instance != null &&
             !string.IsNullOrEmpty(OrdersUIController.Instance.SelectedCrewId))
         {
-            idToShow = OrdersUIController.Instance.SelectedCrewId;
+            crewIdToShow = OrdersUIController.Instance.SelectedCrewId;
         }
 
-        var crew = CrewManager.Instance.GetCrewById(idToShow);
+        if (!string.IsNullOrEmpty(crewIdToShow))
+        {
+            ShowCrewInfo(crewIdToShow);
+            return;
+        }
+
+        // Otherwise, if we have an inspected section, show section info
+        if (OrdersUIController.Instance != null &&
+            !string.IsNullOrEmpty(OrdersUIController.Instance.LastInspectedSectionId))
+        {
+            ShowSectionInfo(OrdersUIController.Instance.LastInspectedSectionId);
+            return;
+        }
+
+        // Nothing selected
+        crewNameText.text = "Crew / Section: (none selected)";
+        crewStatusText.text = "";
+        crewStationText.text = "";
+        crewActionText.text = "";
+    }
+
+    private void ShowCrewInfo(string crewId)
+    {
+        var crew = CrewManager.Instance?.GetCrewById(crewId);
         if (crew == null)
         {
             crewNameText.text = "Crew: (not found)";
@@ -90,40 +113,52 @@ public class DebugHUD : MonoBehaviour
         }
     }
 
+    private void ShowSectionInfo(string sectionId)
+    {
+        var section = PlaneManager.Instance?.GetSection(sectionId);
+        if (section == null)
+        {
+            crewNameText.text = $"Section: {sectionId} (not found)";
+            crewStatusText.text = "";
+            crewStationText.text = "";
+            crewActionText.text = "";
+            return;
+        }
+
+        crewNameText.text = $"Section: {section.Id}";
+        crewStatusText.text = $"Integrity: {section.Integrity}";
+        crewStationText.text = $"On Fire: {section.OnFire}";
+        crewActionText.text = ""; // or "Click crew + action to operate"
+    }
+
 
     // --------------------
-    // BUTTON HOOKS
+    // BUTTON HOOKS (Now using OrdersUIController)
     // --------------------
+    // These methods now delegate to OrdersUIController instead of creating commands directly.
+    // The old hardcoded approach is being phased out in favor of the click-to-select-target workflow.
 
     public void OnMoveCrewButton()
     {
-        if (CrewCommandProcessor.Instance == null) return;
-
-        var cmd = new MoveCrewCommand(watchedCrewId, moveTargetStationId, moveDuration: 4f);
-        CrewCommandProcessor.Instance.Enqueue(cmd);
+        if (OrdersUIController.Instance == null) return;
+        OrdersUIController.Instance.OnActionClicked(PendingOrderType.Move);
     }
 
     public void OnExtinguishFireButton()
     {
-        if (CrewCommandProcessor.Instance == null) return;
-
-        var cmd = new ExtinguishFireCommand(watchedCrewId, fireSectionId, duration: 8f);
-        CrewCommandProcessor.Instance.Enqueue(cmd);
+        if (OrdersUIController.Instance == null) return;
+        OrdersUIController.Instance.OnActionClicked(PendingOrderType.ExtinguishFire);
     }
 
     public void OnRepairSystemButton()
     {
-        if (CrewCommandProcessor.Instance == null) return;
-
-        var cmd = new RepairSystemCommand(watchedCrewId, repairSystemId, duration: 10f);
-        CrewCommandProcessor.Instance.Enqueue(cmd);
+        if (OrdersUIController.Instance == null) return;
+        OrdersUIController.Instance.OnActionClicked(PendingOrderType.RepairSystem);
     }
 
     public void OnTreatInjuryButton()
     {
-        if (CrewCommandProcessor.Instance == null) return;
-
-        var cmd = new TreatInjuryCommand(watchedCrewId, injuredCrewId, duration: 10f);
-        CrewCommandProcessor.Instance.Enqueue(cmd);
+        if (OrdersUIController.Instance == null) return;
+        OrdersUIController.Instance.OnActionClicked(PendingOrderType.TreatInjury);
     }
 }
