@@ -11,6 +11,7 @@ public class DebugHUD : MonoBehaviour
     public TMPro.TMP_Text fuelText;
     public TMPro.TMP_Text nodeText;
     public TMPro.TMP_Text segmentProgressText;
+    public TMPro.TMP_Text pendingActionText; // Shows what action is queued
     [Header("Crew Readout (Debug: one crew)")]
     public string watchedCrewId = "Crew_1";
     public TMPro.TMP_Text crewNameText;
@@ -23,6 +24,12 @@ public class DebugHUD : MonoBehaviour
     public string fireSectionId = "LeftWing";
     public string repairSystemId = "Engine1";
     public string injuredCrewId = "Crew_2";
+
+    [Header("Action Buttons (for visibility control)")]
+    public GameObject moveButton;
+    public GameObject fireButton;
+    public GameObject repairButton;
+    public GameObject medicalButton;
 
     private void Update()
     {
@@ -49,6 +56,43 @@ public class DebugHUD : MonoBehaviour
             nodeText.text = $"Node: {currentNode} -> {nextNode}";
             segmentProgressText.text = $"Segment: {mm.SegmentProgress01 * 100f:F0}%";
         }
+        
+        // Show pending action status
+        UpdatePendingActionText();
+    }
+    
+    private void UpdatePendingActionText()
+    {
+        if (pendingActionText == null || OrdersUIController.Instance == null) return;
+        
+        var controller = OrdersUIController.Instance;
+        
+        if (controller.PendingOrder == PendingOrderType.None)
+        {
+            pendingActionText.text = "";
+            return;
+        }
+        
+        string crewName = "(unknown)";
+        if (!string.IsNullOrEmpty(controller.SelectedCrewId))
+        {
+            var crew = CrewManager.Instance?.GetCrewById(controller.SelectedCrewId);
+            if (crew != null)
+            {
+                crewName = crew.Name;
+            }
+        }
+        
+        string actionText = controller.PendingOrder switch
+        {
+            PendingOrderType.Move => "moving to",
+            PendingOrderType.ExtinguishFire => "extinguishing fire in",
+            PendingOrderType.RepairSystem => "repairing",
+            PendingOrderType.TreatInjury => "performing medical on",
+            _ => "performing action"
+        };
+        
+        pendingActionText.text = $"<color=yellow>{crewName} is {actionText}... (click target or Esc to cancel)</color>";
     }
 
     private void UpdateCrewPanel()
@@ -82,6 +126,9 @@ public class DebugHUD : MonoBehaviour
         crewStatusText.text = "";
         crewStationText.text = "";
         crewActionText.text = "";
+        
+        // Hide action buttons when no crew selected
+        UpdateActionButtonVisibility(false);
     }
 
     private void ShowCrewInfo(string crewId)
@@ -111,6 +158,9 @@ public class DebugHUD : MonoBehaviour
         {
             crewActionText.text = "Action: Idle";
         }
+        
+        // Show action buttons when crew is selected
+        UpdateActionButtonVisibility(true);
     }
 
     private void ShowSectionInfo(string sectionId)
@@ -129,6 +179,9 @@ public class DebugHUD : MonoBehaviour
         crewStatusText.text = $"Integrity: {section.Integrity}";
         crewStationText.text = $"On Fire: {section.OnFire}";
         crewActionText.text = ""; // or "Click crew + action to operate"
+        
+        // Hide action buttons when showing section info
+        UpdateActionButtonVisibility(false);
     }
 
 
@@ -160,5 +213,13 @@ public class DebugHUD : MonoBehaviour
     {
         if (OrdersUIController.Instance == null) return;
         OrdersUIController.Instance.OnActionClicked(PendingOrderType.TreatInjury);
+    }
+
+    private void UpdateActionButtonVisibility(bool visible)
+    {
+        if (moveButton != null) moveButton.SetActive(visible);
+        if (fireButton != null) fireButton.SetActive(visible);
+        if (repairButton != null) repairButton.SetActive(visible);
+        if (medicalButton != null) medicalButton.SetActive(visible);
     }
 }

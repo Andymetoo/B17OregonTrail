@@ -188,6 +188,34 @@ public class PlaneManager : MonoBehaviour
         system.Status = SystemStatus.Operational;
         system.Special = SpecialState.None;
         OnSystemStatusChanged?.Invoke(system);
+        
+        // Also repair the section that contains this system
+        TryRepairSection(system.SectionId, repairStrength);
+        
+        return true;
+    }
+    
+    /// <summary>
+    /// Repair a section's structural integrity.
+    /// </summary>
+    public bool TryRepairSection(string sectionId, float repairStrength = 1f)
+    {
+        var section = GetSection(sectionId);
+        if (section == null) return false;
+        
+        // Can't repair if destroyed
+        if (section.Integrity <= destroyedIntegrityThreshold) return false;
+        
+        // Restore some integrity (default 20 points per repair action)
+        int repairAmount = Mathf.FloorToInt(20f * repairStrength);
+        int oldIntegrity = section.Integrity;
+        section.Integrity = Mathf.Min(100, section.Integrity + repairAmount);
+        
+        if (section.Integrity != oldIntegrity)
+        {
+            OnSectionDamaged?.Invoke(section); // Reuse this event for repairs too
+        }
+        
         return true;
     }
 

@@ -40,6 +40,15 @@ public class OrdersUIController : MonoBehaviour
         }
         Instance = this;
     }
+    
+    private void Update()
+    {
+        // Right-click or Escape to cancel pending action
+        if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
+        {
+            CancelPendingAction();
+        }
+    }
 
     // -------------------------------
     // Called by UI
@@ -104,6 +113,63 @@ public class OrdersUIController : MonoBehaviour
         Debug.Log($"[OrdersUI] Target selected: {pendingTargetId} for order {pendingOrder}");
 
         TryCommitOrder();
+    }
+    
+    /// <summary>
+    /// Called when player clicks on a crew member - used for medical target selection.
+    /// If pending TreatInjury, this is the target. Otherwise it's a crew selection.
+    /// </summary>
+    public void OnCrewButtonClicked(string crewId)
+    {
+        Debug.Log($"[OrdersUI] OnCrewButtonClicked: {crewId}, pendingOrder={pendingOrder}, selectedCrew={selectedCrewId}");
+        
+        // If we have a pending medical action, treat this as the target
+        if (pendingOrder == PendingOrderType.TreatInjury && !string.IsNullOrEmpty(selectedCrewId))
+        {
+            // Don't allow self-treatment or treating healthy crew
+            if (crewId == selectedCrewId)
+            {
+                Debug.Log("[OrdersUI] Can't treat yourself.");
+                return;
+            }
+            
+            var targetCrew = CrewManager.Instance?.GetCrewById(crewId);
+            if (targetCrew != null && targetCrew.Status == CrewStatus.Healthy)
+            {
+                Debug.Log("[OrdersUI] Target crew is not injured.");
+                return;
+            }
+            
+            // This is the medical target
+            pendingTargetId = crewId;
+            Debug.Log($"[OrdersUI] Medical target selected: {crewId}");
+            TryCommitOrder();
+            return;
+        }
+        
+        // Otherwise, this is a crew selection (not a target)
+        // Only allow selecting healthy crew for giving orders
+        var crew = CrewManager.Instance?.GetCrewById(crewId);
+        if (crew != null && crew.Status != CrewStatus.Healthy)
+        {
+            Debug.Log($"[OrdersUI] {crew.Name} is injured and cannot be selected to perform actions.");
+            return;
+        }
+        
+        OnCrewClicked(crewId);
+    }
+    
+    /// <summary>
+    /// Cancel any pending action.
+    /// </summary>
+    public void CancelPendingAction()
+    {
+        if (pendingOrder != PendingOrderType.None)
+        {
+            Debug.Log($"[OrdersUI] Cancelled pending action: {pendingOrder}");
+            pendingOrder = PendingOrderType.None;
+            pendingTargetId = null;
+        }
     }
 
     // -------------------------------

@@ -219,5 +219,28 @@ public class CrewManager : MonoBehaviour
         OnCrewInjuryStageChanged?.Invoke(target);
         return true;
     }
+    
+    /// <summary>
+    /// Apply an injury to a crew member (used by chaos simulator and combat).
+    /// </summary>
+    public bool ApplyInjury(string crewId, CrewStatus injuryLevel)
+    {
+        var crew = GetCrewById(crewId);
+        if (crew == null) return false;
+        if (crew.Status == CrewStatus.Dead) return false;
+        
+        // Set injury status and timer
+        crew.Status = injuryLevel;
+        crew.InjuryTimer = injuryLevel switch
+        {
+            CrewStatus.Light => 90f,
+            CrewStatus.Serious => 60f,
+            CrewStatus.Critical => 45f,
+            _ => 0f
+        };
+        
+        OnCrewInjuryStageChanged?.Invoke(crew);
+        return true;
+    }
 
 }
