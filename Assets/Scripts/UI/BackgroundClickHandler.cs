@@ -12,7 +12,7 @@ public class BackgroundClickHandler : MonoBehaviour, IPointerClickHandler
         // Cancel any pending action when clicking on background
         if (OrdersUIController.Instance != null)
         {
-            OrdersUIController.Instance.CancelPendingAction();
+            OrdersUIController.Instance.ClearSelection();
         }
     }
 }

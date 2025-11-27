@@ -46,6 +46,20 @@ public class CrewCommandProcessor : MonoBehaviour
         while (_commandQueue.Count > 0)
         {
             var cmd = _commandQueue.Dequeue();
+            // Validate issuing crew is healthy before executing
+            var issuingCrew = CrewManager.Instance.GetCrewById(cmd.CrewId);
+            if (issuingCrew == null)
+            {
+                Debug.LogWarning("[CmdProc] Issuing crew not found; skipping command.");
+                continue;
+            }
+
+            if (issuingCrew.Status != CrewStatus.Healthy)
+            {
+                Debug.Log($"[CmdProc] {issuingCrew.Name} is not healthy; command skipped.");
+                continue;
+            }
+
             cmd.Execute(CrewManager.Instance, PlaneManager.Instance);
         }
     }

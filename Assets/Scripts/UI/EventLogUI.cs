@@ -8,6 +8,7 @@ using TMPro;
 /// </summary>
 public class EventLogUI : MonoBehaviour
 {
+    public static EventLogUI Instance { get; private set; }
     [Header("UI References")]
     [SerializeField] private TextMeshProUGUI logText;
     [SerializeField] private int maxLogEntries = 5;
@@ -31,6 +32,12 @@ public class EventLogUI : MonoBehaviour
     
     private void Start()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
         // Subscribe to various event sources
         if (PlaneManager.Instance != null)
         {
@@ -45,6 +52,8 @@ public class EventLogUI : MonoBehaviour
             CrewManager.Instance.OnCrewInjuryStageChanged += OnCrewInjuryChanged;
             CrewManager.Instance.OnCrewDied += OnCrewDied;
             CrewManager.Instance.OnCrewActionCompleted += OnCrewActionCompleted;
+            CrewManager.Instance.OnCrewActionCancelled += OnCrewActionCancelled;
+            CrewManager.Instance.OnCrewActionAssigned += OnCrewActionAssigned;
         }
         
         UpdateDisplay();
@@ -75,21 +84,33 @@ public class EventLogUI : MonoBehaviour
         UpdateDisplay();
     }
     
-    private void AddMessage(string message, Color color)
+    // Public logging API for other systems
+    public void Log(string message, Color color)
     {
         logEntries.Enqueue(new LogEntry(message, color));
         Debug.Log($"[EventLog] {message}");
     }
+
+    // Keep private fallback for internal callers
+    private void AddMessage(string message, Color color)
+    {
+        Log(message, color);
+    }
     
     private void OnSectionDamaged(PlaneSectionState section)
     {
+        // Always report damage with current integrity
         if (section.Integrity <= 0)
         {
             AddMessage($"The {section.Id} is destroyed!", Color.red);
         }
         else if (section.Integrity < 30)
         {
-            AddMessage($"The {section.Id} is heavily damaged!", Color.red);
+            AddMessage($"The {section.Id} is heavily damaged (Integrity {section.Integrity}).", Color.red);
+        }
+        else
+        {
+            AddMessage($"The {section.Id} is damaged (Integrity {section.Integrity}).", new Color(1f, 0.8f, 0f)); // amber
         }
     }
     
@@ -156,6 +177,30 @@ public class EventLogUI : MonoBehaviour
         else if (crew.CurrentAction?.Type == ActionType.TreatInjury)
         {
             AddMessage($"{crew.Name} finished medical treatment.", Color.green);
+        }
+    }
+
+    private void OnCrewActionCancelled(CrewMember crew)
+    {
+        AddMessage($"{crew.Name}'s action was cancelled.", Color.yellow);
+    }
+
+    private void OnCrewActionAssigned(CrewMember crew)
+    {
+        var act = crew.CurrentAction;
+        if (act == null) return;
+        string msg = act.Type switch
+        {
+            ActionType.ExtinguishFire => $"{crew.Name} started fighting fire in {act.TargetId}.",
+            ActionType.Repair => $"{crew.Name} started repairing {act.TargetId}.",
+            ActionType.TreatInjury => $"{crew.Name} started medical treatment on {act.TargetId}.",
+            ActionType.Move => $"{crew.Name} is moving to {act.TargetId}.",
+            ActionType.ManStation => $"{crew.Name} is manning {act.TargetId}.",
+            _ => null
+        };
+        if (msg != null)
+        {
+            AddMessage(msg, Color.yellow);
         }
     }
     

@@ -177,6 +177,11 @@ public class PlaneManager : MonoBehaviour
     {
         var system = GetSystem(systemId);
         if (system == null) return false;
+        var section = GetSection(system.SectionId);
+        if (section == null) return false;
+
+        // Cannot repair while section is on fire
+        if (section.OnFire) return false;
 
         if (system.Status == SystemStatus.Destroyed)
         {
@@ -205,6 +210,10 @@ public class PlaneManager : MonoBehaviour
         
         // Can't repair if destroyed
         if (section.Integrity <= destroyedIntegrityThreshold) return false;
+        // Can't repair if already at max integrity
+        if (section.Integrity >= 100) return false;
+        // Can't repair while on fire
+        if (section.OnFire) return false;
         
         // Restore some integrity (default 20 points per repair action)
         int repairAmount = Mathf.FloorToInt(20f * repairStrength);

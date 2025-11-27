@@ -30,11 +30,35 @@ public class DebugHUD : MonoBehaviour
     public GameObject fireButton;
     public GameObject repairButton;
     public GameObject medicalButton;
+    public GameObject cancelActionButton;
+
+    [Header("Pending Message Display")]
+    public float pendingMessageLingerSeconds = 5f;
+
+    private string _pendingMessage;
+    private float _pendingMessageExpireTime;
 
     private void Update()
     {
         UpdateTopBar();
         UpdateCrewPanel();
+        UpdateCancelButtonVisibility();
+    }
+
+    private void Start()
+    {
+        if (OrdersUIController.Instance != null)
+        {
+            OrdersUIController.Instance.OnPendingActionMessage += HandlePendingActionMessage;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (OrdersUIController.Instance != null)
+        {
+            OrdersUIController.Instance.OnPendingActionMessage -= HandlePendingActionMessage;
+        }
     }
 
     private void UpdateTopBar()
@@ -63,36 +87,24 @@ public class DebugHUD : MonoBehaviour
     
     private void UpdatePendingActionText()
     {
-        if (pendingActionText == null || OrdersUIController.Instance == null) return;
+        if (pendingActionText == null) return;
         
-        var controller = OrdersUIController.Instance;
-        
-        if (controller.PendingOrder == PendingOrderType.None)
+        // If we have a message and it's not expired, keep showing it
+        if (!string.IsNullOrEmpty(_pendingMessage) && Time.time < _pendingMessageExpireTime)
+        {
+            pendingActionText.text = _pendingMessage;
+        }
+        else
         {
             pendingActionText.text = "";
-            return;
         }
-        
-        string crewName = "(unknown)";
-        if (!string.IsNullOrEmpty(controller.SelectedCrewId))
-        {
-            var crew = CrewManager.Instance?.GetCrewById(controller.SelectedCrewId);
-            if (crew != null)
-            {
-                crewName = crew.Name;
-            }
-        }
-        
-        string actionText = controller.PendingOrder switch
-        {
-            PendingOrderType.Move => "moving to",
-            PendingOrderType.ExtinguishFire => "extinguishing fire in",
-            PendingOrderType.RepairSystem => "repairing",
-            PendingOrderType.TreatInjury => "performing medical on",
-            _ => "performing action"
-        };
-        
-        pendingActionText.text = $"<color=yellow>{crewName} is {actionText}... (click target or Esc to cancel)</color>";
+    }
+
+    private void HandlePendingActionMessage(string message)
+    {
+        if (pendingActionText == null) return;
+        _pendingMessage = $"<color=yellow>{message}</color>";
+        _pendingMessageExpireTime = Time.time + pendingMessageLingerSeconds;
     }
 
     private void UpdateCrewPanel()
@@ -178,7 +190,23 @@ public class DebugHUD : MonoBehaviour
         crewNameText.text = $"Section: {section.Id}";
         crewStatusText.text = $"Integrity: {section.Integrity}";
         crewStationText.text = $"On Fire: {section.OnFire}";
-        crewActionText.text = ""; // or "Click crew + action to operate"
+
+        // Summarize systems in this section (operational/damaged/destroyed)
+        int op = 0, dmg = 0, des = 0;
+        if (PlaneManager.Instance != null)
+        {
+            foreach (var sys in PlaneManager.Instance.Systems)
+            {
+                if (sys.SectionId != section.Id) continue;
+                switch (sys.Status)
+                {
+                    case SystemStatus.Operational: op++; break;
+                    case SystemStatus.Damaged: dmg++; break;
+                    case SystemStatus.Destroyed: des++; break;
+                }
+            }
+        }
+        crewActionText.text = $"Systems: Op {op} / Dmg {dmg} / Des {des}";
         
         // Hide action buttons when showing section info
         UpdateActionButtonVisibility(false);
@@ -221,5 +249,19 @@ public class DebugHUD : MonoBehaviour
         if (fireButton != null) fireButton.SetActive(visible);
         if (repairButton != null) repairButton.SetActive(visible);
         if (medicalButton != null) medicalButton.SetActive(visible);
+    }
+
+    private void UpdateCancelButtonVisibility()
+    {
+        if (cancelActionButton == null) return;
+        var ctrl = OrdersUIController.Instance;
+        bool show = ctrl != null && ctrl.PendingOrder != PendingOrderType.None;
+        cancelActionButton.SetActive(show);
+    }
+
+    public void OnCancelPendingButton()
+    {
+        OrdersUIController.Instance?.CancelPendingAction();
+        UpdateCancelButtonVisibility();
     }
 }

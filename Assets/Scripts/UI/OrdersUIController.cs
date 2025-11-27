@@ -31,6 +31,9 @@ public class OrdersUIController : MonoBehaviour
     public PendingOrderType PendingOrder => pendingOrder;
     public string LastInspectedSectionId => lastInspectedSectionId;
 
+    // UI message event for pending action updates
+    public System.Action<string> OnPendingActionMessage;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -56,11 +59,46 @@ public class OrdersUIController : MonoBehaviour
 
     public void OnCrewClicked(string crewId)
     {
+        // Special handling: if we are pending a medical action, interpret this click as target selection
+        if (pendingOrder == PendingOrderType.TreatInjury && !string.IsNullOrEmpty(selectedCrewId))
+        {
+            if (crewId == selectedCrewId)
+            {
+                Debug.Log("[OrdersUI] Can't treat yourself.");
+                return;
+            }
+
+            var targetCrew = CrewManager.Instance?.GetCrewById(crewId);
+            if (targetCrew == null)
+            {
+                Debug.Log("[OrdersUI] Target crew not found.");
+                return;
+            }
+
+            if (targetCrew.Status == CrewStatus.Healthy)
+            {
+                Debug.Log("[OrdersUI] Target crew is not injured.");
+                return;
+            }
+
+            // This is the medical target
+            pendingTargetId = crewId;
+            Debug.Log($"[OrdersUI] Medical target selected via OnCrewClicked: {crewId}");
+            TryCommitOrder();
+            return;
+        }
+
+        // Normal selection path
         selectedCrewId = crewId;
         pendingOrder = PendingOrderType.None;
         pendingTargetId = null;
 
         Debug.Log($"[OrdersUI] Selected crew: {selectedCrewId}");
+        // Fire message: show selected crew name
+        var crew = CrewManager.Instance?.GetCrewById(selectedCrewId);
+        string crewName = crew != null ? crew.Name : selectedCrewId;
+        OnPendingActionMessage?.Invoke($"{crewName} selected.");
+        EventLogUI.Instance?.Log($"{crewName} selected.", Color.yellow);
     }
 
     /// <summary>
@@ -74,9 +112,40 @@ public class OrdersUIController : MonoBehaviour
             return;
         }
 
+        // Validate selected crew is Healthy before allowing any pending order
+        var crew = CrewManager.Instance?.GetCrewById(selectedCrewId);
+        if (crew == null)
+        {
+            Debug.Log("[OrdersUI] Selected crew not found.");
+            return;
+        }
+
+        if (crew.Status != CrewStatus.Healthy)
+        {
+            Debug.Log($"[OrdersUI] {crew.Name} is {crew.Status} and cannot initiate actions. Select a healthy crew.");
+            // Explicitly clear any pending order request
+            pendingOrder = PendingOrderType.None;
+            pendingTargetId = null;
+            EventLogUI.Instance?.Log($"{crew.Name} is {crew.Status} and cannot initiate actions.", Color.red);
+            return;
+        }
+
         pendingOrder = orderType;
         pendingTargetId = null;
         Debug.Log($"[OrdersUI] Pending order: {orderType} for {selectedCrewId}");
+        // Fire message: selected crew is performing action
+        var crewInfo = CrewManager.Instance?.GetCrewById(selectedCrewId);
+        string crewName = crewInfo != null ? crewInfo.Name : selectedCrewId;
+        string actionText = orderType switch
+        {
+            PendingOrderType.Move => "moving to...",
+            PendingOrderType.ExtinguishFire => "extinguishing fire in...",
+            PendingOrderType.RepairSystem => "repairing...",
+            PendingOrderType.TreatInjury => "performing medical...",
+            _ => "performing action..."
+        };
+        OnPendingActionMessage?.Invoke($"{crewName} is {actionText}");
+        EventLogUI.Instance?.Log($"{crewName} is {actionText}", Color.yellow);
     }
 
     // Legacy methods - kept for compatibility if any UI buttons still reference them
@@ -98,6 +167,8 @@ public class OrdersUIController : MonoBehaviour
         // If we don't have a pending order, treat this as an inspect
         if (pendingOrder == PendingOrderType.None)
         {
+            // Clear any crew selection when inspecting a section to show section stats
+            selectedCrewId = null;
             lastInspectedSectionId = targetId;
             Debug.Log($"[OrdersUI] Inspecting section: {targetId}");
             return;
@@ -169,7 +240,29 @@ public class OrdersUIController : MonoBehaviour
             Debug.Log($"[OrdersUI] Cancelled pending action: {pendingOrder}");
             pendingOrder = PendingOrderType.None;
             pendingTargetId = null;
+            EventLogUI.Instance?.Log("Action cancelled.", Color.yellow);
         }
+    }
+
+    /// <summary>
+    /// Clear any current selection and inspection, and cancel actions.
+    /// </summary>
+    public void ClearSelection()
+    {
+        selectedCrewId = null;
+        lastInspectedSectionId = null;
+        CancelPendingAction();
+        OnPendingActionMessage?.Invoke("");
+        Debug.Log("[OrdersUI] Cleared selection and inspection.");
+        EventLogUI.Instance?.Log("Selection cleared.", Color.yellow);
+    }
+
+    /// <summary>
+    /// Optional explicit hook for section buttons.
+    /// </summary>
+    public void OnSectionButtonClicked(string sectionId)
+    {
+        OnTargetClicked(sectionId);
     }
 
     // -------------------------------
@@ -214,6 +307,21 @@ public class OrdersUIController : MonoBehaviour
         {
             CrewCommandProcessor.Instance.Enqueue(cmd);
             Debug.Log($"[OrdersUI] Enqueued {pendingOrder} from {selectedCrewId} to {pendingTargetId}");
+            // Fire message: full action text with target
+            var crew = CrewManager.Instance?.GetCrewById(selectedCrewId);
+            string crewName = crew != null ? crew.Name : selectedCrewId;
+            string actionText = pendingOrder switch
+            {
+                PendingOrderType.Move => $"moving to {pendingTargetId}",
+                PendingOrderType.ExtinguishFire => $"extinguishing fire in {pendingTargetId}",
+                PendingOrderType.RepairSystem => $"repairing {pendingTargetId}",
+                PendingOrderType.TreatInjury => $"performing medical on {pendingTargetId}",
+                _ => $"performing action at {pendingTargetId}"
+            };
+            OnPendingActionMessage?.Invoke($"{crewName} is {actionText}");
+            // Also log to EventLog
+            var color = pendingOrder == PendingOrderType.TreatInjury ? Color.green : Color.yellow;
+            EventLogUI.Instance?.Log($"{crewName} is {actionText}", color);
         }
 
         // Reset order state

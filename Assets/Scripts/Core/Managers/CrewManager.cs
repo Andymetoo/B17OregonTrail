@@ -12,8 +12,14 @@ public class CrewManager : MonoBehaviour
     // Events for UI or other systems to subscribe to
     public event Action<CrewMember> OnCrewActionAssigned;
     public event Action<CrewMember> OnCrewActionCompleted;
+    public event Action<CrewMember> OnCrewActionCancelled;
     public event Action<CrewMember> OnCrewInjuryStageChanged;
     public event Action<CrewMember> OnCrewDied;
+
+    // Exclusive target locks so only one crew can act on a target
+    private readonly HashSet<string> _treatingCrewTargets = new HashSet<string>();      // crewId being treated
+    private readonly HashSet<string> _extinguishSectionTargets = new HashSet<string>(); // sectionId being extinguished
+    private readonly HashSet<string> _repairSectionTargets = new HashSet<string>();     // sectionId being repaired
 
     private void Awake()
     {
@@ -87,6 +93,12 @@ public class CrewManager : MonoBehaviour
 
     private void TickAction(CrewMember crew, float deltaTime)
     {
+        // Cancel if crew becomes injured/unhealthy while performing an action
+        if (crew.Status != CrewStatus.Healthy)
+        {
+            CancelCurrentAction(crew, "Crew became injured or incapacitated");
+            return;
+        }
         crew.CurrentAction.Elapsed += deltaTime;
 
         if (crew.CurrentAction.IsComplete)
@@ -121,7 +133,12 @@ public class CrewManager : MonoBehaviour
                 // Ask PlaneManager to repair this system.
                 if (PlaneManager.Instance != null)
                 {
-                    PlaneManager.Instance.TryRepairSystem(action.TargetId);
+                    // If target is a system id, this returns true. If not, fallback to section repair with section id.
+                    bool repaired = PlaneManager.Instance.TryRepairSystem(action.TargetId);
+                    if (!repaired)
+                    {
+                        PlaneManager.Instance.TryRepairSection(action.TargetId);
+                    }
                 }
                 break;
 
@@ -141,8 +158,49 @@ public class CrewManager : MonoBehaviour
                 break;
         }
 
-        crew.CurrentAction = null;
+        // Fire completion event while action info is still available to listeners
         OnCrewActionCompleted?.Invoke(crew);
+        // Now clear and release lock
+        crew.CurrentAction = null;
+        ReleaseTargetLock(action);
+    }
+
+    private void CancelCurrentAction(CrewMember crew, string reason)
+    {
+        if (crew.CurrentAction == null) return;
+        var action = crew.CurrentAction;
+        crew.CurrentAction = null;
+        OnCrewActionCancelled?.Invoke(crew);
+        ReleaseTargetLock(action);
+        Debug.Log($"[Crew] Action cancelled for {crew.Name}: {reason}");
+    }
+
+    private void ReleaseTargetLock(CrewAction action)
+    {
+        if (action == null) return;
+        switch (action.Type)
+        {
+            case ActionType.TreatInjury:
+                _treatingCrewTargets.Remove(action.TargetId);
+                break;
+            case ActionType.ExtinguishFire:
+                _extinguishSectionTargets.Remove(action.TargetId);
+                break;
+            case ActionType.Repair:
+                if (PlaneManager.Instance != null)
+                {
+                    var sys = PlaneManager.Instance.GetSystem(action.TargetId);
+                    if (sys != null)
+                    {
+                        _repairSectionTargets.Remove(sys.SectionId);
+                    }
+                    else
+                    {
+                        _repairSectionTargets.Remove(action.TargetId);
+                    }
+                }
+                break;
+        }
     }
 
 
@@ -159,12 +217,90 @@ public class CrewManager : MonoBehaviour
     {
         var crew = AllCrew.Find(c => c.Id == crewId);
         if (crew == null) return false;
-
+        
         // Basic validation examples:
         if (crew.Status == CrewStatus.Dead) return false;
+        // Only healthy crew can be assigned actions
+        if (crew.Status != CrewStatus.Healthy) return false;
         if (crew.CurrentAction != null) return false;
 
+        // Enforce exclusive target locks
+        if (action != null)
+        {
+            switch (action.Type)
+            {
+                case ActionType.TreatInjury:
+                    if (_treatingCrewTargets.Contains(action.TargetId)) return false;
+                    break;
+                case ActionType.ExtinguishFire:
+                    if (_extinguishSectionTargets.Contains(action.TargetId)) return false;
+                    break;
+                case ActionType.Repair:
+                    if (PlaneManager.Instance != null)
+                    {
+                        var sys = PlaneManager.Instance.GetSystem(action.TargetId);
+                        if (sys != null)
+                        {
+                            if (_repairSectionTargets.Contains(sys.SectionId)) return false;
+                        }
+                        else
+                        {
+                            // Target may be a section id directly
+                            if (_repairSectionTargets.Contains(action.TargetId)) return false;
+                        }
+
+                        // Fire precedence and nothing-to-repair checks
+                        string sectionId = sys != null ? sys.SectionId : action.TargetId;
+                        var section = PlaneManager.Instance.GetSection(sectionId);
+                        if (section != null)
+                        {
+                            if (section.OnFire)
+                            {
+                                return false;
+                            }
+                            if (section.Integrity >= 100)
+                            {
+                                bool systemNeedsRepair = sys != null && sys.Status != SystemStatus.Operational;
+                                if (!systemNeedsRepair)
+                                {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    break;
+            }
+        }
+
         crew.CurrentAction = action;
+
+        // Acquire locks
+        if (action != null)
+        {
+            switch (action.Type)
+            {
+                case ActionType.TreatInjury:
+                    _treatingCrewTargets.Add(action.TargetId);
+                    break;
+                case ActionType.ExtinguishFire:
+                    _extinguishSectionTargets.Add(action.TargetId);
+                    break;
+                case ActionType.Repair:
+                    if (PlaneManager.Instance != null)
+                    {
+                        var sys = PlaneManager.Instance.GetSystem(action.TargetId);
+                        if (sys != null)
+                        {
+                            _repairSectionTargets.Add(sys.SectionId);
+                        }
+                        else
+                        {
+                            _repairSectionTargets.Add(action.TargetId);
+                        }
+                    }
+                    break;
+            }
+        }
         OnCrewActionAssigned?.Invoke(crew);
         return true;
     }
