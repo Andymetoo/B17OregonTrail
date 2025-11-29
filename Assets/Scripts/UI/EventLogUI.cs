@@ -38,19 +38,12 @@ public class EventLogUI : MonoBehaviour
             return;
         }
         Instance = this;
-        // Subscribe to various event sources
-        if (PlaneManager.Instance != null)
-        {
-            PlaneManager.Instance.OnSectionDamaged += OnSectionDamaged;
-            PlaneManager.Instance.OnFireStarted += OnFireStarted;
-            PlaneManager.Instance.OnFireExtinguished += OnFireExtinguished;
-            PlaneManager.Instance.OnSystemStatusChanged += OnSystemStatusChanged;
-        }
+        
+        // NOTE: This EventLogUI now handles ONLY crew actions.
+        // Damage/fire/system events are handled by DamageLogUI.
         
         if (CrewManager.Instance != null)
         {
-            CrewManager.Instance.OnCrewInjuryStageChanged += OnCrewInjuryChanged;
-            CrewManager.Instance.OnCrewDied += OnCrewDied;
             CrewManager.Instance.OnCrewActionCompleted += OnCrewActionCompleted;
             CrewManager.Instance.OnCrewActionCancelled += OnCrewActionCancelled;
             CrewManager.Instance.OnCrewActionAssigned += OnCrewActionAssigned;
@@ -99,68 +92,32 @@ public class EventLogUI : MonoBehaviour
     
     private void OnSectionDamaged(PlaneSectionState section)
     {
-        // Always report damage with current integrity
-        if (section.Integrity <= 0)
-        {
-            AddMessage($"The {section.Id} is destroyed!", Color.red);
-        }
-        else if (section.Integrity < 30)
-        {
-            AddMessage($"The {section.Id} is heavily damaged (Integrity {section.Integrity}).", Color.red);
-        }
-        else
-        {
-            AddMessage($"The {section.Id} is damaged (Integrity {section.Integrity}).", new Color(1f, 0.8f, 0f)); // amber
-        }
+        // MOVED TO DamageLogUI - keeping this stub for now in case of references
     }
     
     private void OnFireStarted(PlaneSectionState section)
     {
-        AddMessage($"Fire breaks out in the {section.Id}!", Color.red);
+        // MOVED TO DamageLogUI
     }
     
     private void OnFireExtinguished(PlaneSectionState section)
     {
-        AddMessage($"Fire in the {section.Id} has been extinguished.", Color.green);
+        // MOVED TO DamageLogUI
     }
     
     private void OnSystemStatusChanged(PlaneSystemState system)
     {
-        if (system.Status == SystemStatus.Destroyed)
-        {
-            AddMessage($"{system.Id} system is destroyed!", Color.red);
-        }
-        else if (system.Status == SystemStatus.Damaged)
-        {
-            AddMessage($"{system.Id} system is damaged.", Color.yellow);
-        }
-        else if (system.Status == SystemStatus.Operational)
-        {
-            AddMessage($"{system.Id} system repaired.", Color.green);
-        }
+        // MOVED TO DamageLogUI
     }
     
     private void OnCrewInjuryChanged(CrewMember crew)
     {
-        string statusMessage = crew.Status switch
-        {
-            CrewStatus.Light => $"{crew.Name} is lightly wounded.",
-            CrewStatus.Serious => $"{crew.Name} is seriously wounded!",
-            CrewStatus.Critical => $"{crew.Name} is critically injured!",
-            CrewStatus.Healthy => $"{crew.Name} has recovered.",
-            _ => null
-        };
-        
-        if (statusMessage != null)
-        {
-            Color color = crew.Status == CrewStatus.Healthy ? Color.green : Color.red;
-            AddMessage(statusMessage, color);
-        }
+        // MOVED TO DamageLogUI
     }
     
     private void OnCrewDied(CrewMember crew)
     {
-        AddMessage($"{crew.Name} has died.", Color.red);
+        // MOVED TO DamageLogUI
     }
     
     private void OnCrewActionCompleted(CrewMember crew)

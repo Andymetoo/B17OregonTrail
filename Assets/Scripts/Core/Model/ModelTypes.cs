@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 [Serializable]
 public class CrewMember {
@@ -12,6 +13,12 @@ public class CrewMember {
     public CrewAction CurrentAction;
 
     public float InjuryTimer; // seconds until next injury stage or death
+    
+    // --- VISUAL & MOVEMENT ---
+    public Vector2 HomePosition;      // Where this crew's station is located on screen
+    public Vector2 CurrentPosition;   // Current screen position (for movement lerp)
+    public float MoveSpeed = 50f;     // Pixels per second movement speed
+    public CrewVisualState VisualState = CrewVisualState.IdleAtStation;
 }
 
 [Serializable]
@@ -20,8 +27,31 @@ public class CrewAction {
     public string TargetId;  // sectionId, systemId, crewId, stationId
     public float Duration;
     public float Elapsed;
+    
+    // --- MOVEMENT TRACKING ---
+    public ActionPhase Phase = ActionPhase.MoveToTarget;  // Current phase of the action
+    public Vector2 TargetPosition;  // Screen position to move to for this action
+    public Vector2 ReturnPosition;  // Where to return after action completes
 
     public bool IsComplete => Elapsed >= Duration;
+}
+
+/// <summary>
+/// Multi-phase action flow: Move to target → Perform action → Move back to station
+/// </summary>
+public enum ActionPhase {
+    MoveToTarget,   // Crew is walking to the target location
+    Performing,     // Crew is performing the action (repair, medical, etc.)
+    Returning       // Crew is walking back to their station
+}
+
+/// <summary>
+/// Visual state of crew member for sprite selection
+/// </summary>
+public enum CrewVisualState {
+    IdleAtStation,  // Standing at their station
+    Moving,         // Walking to/from a target
+    Working         // Performing an action (repair, medical, fire)
 }
 
 [Serializable]
