@@ -33,32 +33,27 @@ public class CrewManager : MonoBehaviour
     
     private void Start()
     {
-        // Initialize crew home positions from CrewPositionRegistry
         InitializeCrewPositions();
     }
     
     /// <summary>
-    /// Initialize crew HomePosition and CurrentPosition from CrewPositionRegistry.
-    /// Call this after crew list is populated.
+    /// Initialize crew home positions from CrewPositionRegistry
     /// </summary>
     private void InitializeCrewPositions()
     {
         if (CrewPositionRegistry.Instance == null)
         {
-            Debug.LogWarning("[CrewManager] CrewPositionRegistry not found! Crew positions will default to (0,0).");
+            Debug.LogError("[CrewManager] CrewPositionRegistry not found! Crew will not have valid positions.");
             return;
         }
         
         foreach (var crew in AllCrew)
         {
-            // Use crew's CurrentStationId (or fall back to crew Id) to look up home position
             string stationId = !string.IsNullOrEmpty(crew.CurrentStationId) ? crew.CurrentStationId : crew.Id;
-            
             Vector2 homePos = CrewPositionRegistry.Instance.GetStationPosition(stationId);
-            crew.HomePosition = homePos;
-            crew.CurrentPosition = homePos; // Start at home
             
-            Debug.Log($"[CrewManager] {crew.Name} home position set to {homePos} (station: {stationId})");
+            crew.HomePosition = homePos;
+            crew.CurrentPosition = homePos;
         }
     }
 
@@ -139,14 +134,11 @@ public class CrewManager : MonoBehaviour
             case ActionPhase.MoveToTarget:
                 TickMovement(crew, action.TargetPosition, deltaTime);
                 
-                // Check if arrived at target
                 if (Vector2.Distance(crew.CurrentPosition, action.TargetPosition) < 1f)
                 {
-                    // Transition to performing phase
                     action.Phase = ActionPhase.Performing;
-                    action.Elapsed = 0f; // Reset timer for perform phase
+                    action.Elapsed = 0f;
                     crew.VisualState = CrewVisualState.Working;
-                    Debug.Log($"[CrewManager] {crew.Name} arrived at target, starting {action.Type}");
                 }
                 break;
                 
@@ -156,24 +148,18 @@ public class CrewManager : MonoBehaviour
                 
                 if (action.IsComplete)
                 {
-                    // Execute the action effect (repair, heal, extinguish)
                     ExecuteActionEffect(crew);
-                    
-                    // Transition to returning phase
                     action.Phase = ActionPhase.Returning;
                     action.Elapsed = 0f;
                     crew.VisualState = CrewVisualState.Moving;
-                    Debug.Log($"[CrewManager] {crew.Name} completed {action.Type}, returning to station");
                 }
                 break;
                 
             case ActionPhase.Returning:
                 TickMovement(crew, action.ReturnPosition, deltaTime);
                 
-                // Check if returned to station
                 if (Vector2.Distance(crew.CurrentPosition, action.ReturnPosition) < 1f)
                 {
-                    // Action fully complete
                     CompleteAction(crew);
                 }
                 break;
@@ -216,7 +202,13 @@ public class CrewManager : MonoBehaviour
         // Clear action and release lock
         crew.CurrentAction = null;
         crew.VisualState = CrewVisualState.IdleAtStation;
-        crew.CurrentPosition = crew.HomePosition; // Ensure they're at home
+        
+        // Only reset position if we have a valid home position
+        if (crew.HomePosition != Vector2.zero)
+        {
+            crew.CurrentPosition = crew.HomePosition;
+        }
+        
         ReleaseTargetLock(action);
     }
     
@@ -328,74 +320,53 @@ public class CrewManager : MonoBehaviour
     {
         action.Phase = ActionPhase.MoveToTarget;
         action.ReturnPosition = crew.HomePosition;
-        
-        // Determine target position based on action type
         action.TargetPosition = GetTargetPositionForAction(action);
         
-        // Validation: If target position is invalid, skip movement phase
+        // Skip movement if target is invalid or too close
         if (action.TargetPosition == Vector2.zero || Vector2.Distance(crew.CurrentPosition, action.TargetPosition) < 5f)
         {
-            Debug.LogWarning($"[CrewManager] {crew.Name} target position invalid or too close ({action.TargetPosition}), skipping to Performing phase");
             action.Phase = ActionPhase.Performing;
             crew.VisualState = CrewVisualState.Working;
         }
         else
         {
             crew.VisualState = CrewVisualState.Moving;
-            Debug.Log($"[CrewManager] {crew.Name} starting {action.Type} - moving from {crew.CurrentPosition} to {action.TargetPosition}");
         }
     }
     
     /// <summary>
-    /// Get the screen position where crew should go to perform this action.
+    /// Get the screen position where crew should go to perform this action
     /// </summary>
     private Vector2 GetTargetPositionForAction(CrewAction action)
     {
+        if (CrewPositionRegistry.Instance == null)
+        {
+            Debug.LogError("[CrewManager] CrewPositionRegistry.Instance is null!");
+            return Vector2.zero;
+        }
+        
         switch (action.Type)
         {
             case ActionType.Repair:
             case ActionType.ExtinguishFire:
-                // Get section position - first try as system, then as section
+                // Get section position
                 if (PlaneManager.Instance != null)
                 {
                     var system = PlaneManager.Instance.GetSystem(action.TargetId);
                     string sectionId = system != null ? system.SectionId : action.TargetId;
-                    
-                    if (CrewPositionRegistry.Instance != null)
-                    {
-                        Vector2 pos = CrewPositionRegistry.Instance.GetSectionPosition(sectionId);
-                        Debug.Log($"[CrewManager] Action {action.Type} targeting section '{sectionId}' at position {pos}");
-                        return pos;
-                    }
-                    else
-                    {
-                        Debug.LogError("[CrewManager] CrewPositionRegistry.Instance is null!");
-                    }
+                    return CrewPositionRegistry.Instance.GetSectionPosition(sectionId);
                 }
                 return Vector2.zero;
                 
             case ActionType.TreatInjury:
                 // Move to target crew's current position
                 var targetCrew = GetCrewById(action.TargetId);
-                if (targetCrew != null)
-                {
-                    Debug.Log($"[CrewManager] Medical action targeting crew '{targetCrew.Name}' at position {targetCrew.CurrentPosition}");
-                    return targetCrew.CurrentPosition;
-                }
-                Debug.LogWarning($"[CrewManager] Target crew '{action.TargetId}' not found for medical action");
-                return Vector2.zero;
+                return targetCrew != null ? targetCrew.CurrentPosition : Vector2.zero;
                 
             case ActionType.Move:
             case ActionType.ManStation:
                 // Move to station position
-                if (CrewPositionRegistry.Instance != null)
-                {
-                    Vector2 pos = CrewPositionRegistry.Instance.GetStationPosition(action.TargetId);
-                    Debug.Log($"[CrewManager] Move/ManStation action targeting station '{action.TargetId}' at position {pos}");
-                    return pos;
-                }
-                Debug.LogError("[CrewManager] CrewPositionRegistry.Instance is null!");
-                return Vector2.zero;
+                return CrewPositionRegistry.Instance.GetStationPosition(action.TargetId);
                 
             default:
                 return Vector2.zero;
