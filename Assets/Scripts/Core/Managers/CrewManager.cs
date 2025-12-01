@@ -23,10 +23,17 @@ public class CrewManager : MonoBehaviour
 
     // Toggle for deep diagnostic logging
     [Header("Debug")]
-    public bool verboseLogging = true;
+    public bool verboseLogging = false;
+    [Tooltip("When enabled, prints detailed trace logs for a specific crew.")]
+    public bool diagnosticMode = true;
+    [Tooltip("Crew Id to trace (leave empty to trace all crew).")]
+    public string diagnosticCrewId = "TailGunner";
+    [Tooltip("If true, section targets are re-resolved from CrewPositionRegistry every tick while moving.")]
+    public bool resolveSectionTargetLive = false;
 
     // Initialization gate to avoid ticking before positions are resolved
     private bool _positionsInitialized = false;
+    public bool PositionsInitialized => _positionsInitialized;
 
     private void Awake()
     {
@@ -67,6 +74,8 @@ public class CrewManager : MonoBehaviour
         foreach (var crew in AllCrew)
         {
             string stationId = !string.IsNullOrEmpty(crew.CurrentStationId) ? crew.CurrentStationId : crew.Id;
+            var rect = CrewPositionRegistry.Instance.GetStationRect(stationId);
+            // Always resolve via registry to ensure referenceParent-space conversion
             Vector2 homePos = CrewPositionRegistry.Instance.GetStationPosition(stationId);
 
             crew.HomePosition = homePos;
@@ -75,6 +84,12 @@ public class CrewManager : MonoBehaviour
             if (homePos == Vector2.zero)
             {
                 missingStations.Add(stationId);
+            }
+
+            if (ShouldTrace(crew))
+            {
+                string rectInfo = rect == null ? "<null>" : $"{BuildPath(rect)} rectAnchored={rect.anchoredPosition}";
+                Debug.Log($"[Trace] StartPosition crew={crew.Id} stationId={stationId} rect={rectInfo} resolvedHome(refParent)={homePos}");
             }
         }
         if (missingStations.Count > 0)
@@ -87,20 +102,13 @@ public class CrewManager : MonoBehaviour
     {
         foreach (var crew in AllCrew)
         {
-            if (crew.CurrentAction != null)
-            {
-                Debug.LogWarning($"[CrewManager] Clearing lingering action '{crew.CurrentAction.Type}' for crew '{crew.Name}' at start.");
-            }
+            // Clear any lingering actions (including serialized Idle placeholders)
             crew.CurrentAction = null;
             crew.VisualState = CrewVisualState.IdleAtStation;
             crew.CurrentPosition = crew.HomePosition;
-            if (verboseLogging)
-            {
-                Debug.Log($"[CrewManager] Reset: id={crew.Id} station={crew.CurrentStationId} home={crew.HomePosition}");
-            }
+            // Suppress reset logs to reduce noise
         }
-        if (verboseLogging)
-            Debug.Log("[CrewManager] ResetAllCrewState complete.");
+        // No aggregate log; keep console clean
     }
 
     /// <summary>
@@ -186,15 +194,47 @@ public class CrewManager : MonoBehaviour
         switch (action.Phase)
         {
             case ActionPhase.MoveToTarget:
-                TickMovement(crew, action.TargetPosition, deltaTime);
+                // Optional: re-resolve section target live to reflect moved transforms (always in referenceParent space)
+                if (resolveSectionTargetLive && (action.Type == ActionType.Repair || action.Type == ActionType.ExtinguishFire))
+                {
+                    string sectionId = action.TargetId;
+                    if (PlaneManager.Instance != null)
+                    {
+                        var sys = PlaneManager.Instance.GetSystem(action.TargetId);
+                        if (sys != null) sectionId = sys.SectionId;
+                    }
+                    if (CrewPositionRegistry.Instance != null)
+                    {
+                        action.TargetPosition = CrewPositionRegistry.Instance.GetSectionPosition(sectionId);
+                    }
+                }
+                // Move through waypoints if present
+                if (action.Waypoints != null && action.Waypoints.Count > 0 && action.CurrentWaypointIndex < action.Waypoints.Count)
+                {
+                    Vector2 wp = action.Waypoints[action.CurrentWaypointIndex];
+                    TickMovement(crew, wp, deltaTime);
+                    if (Vector2.Distance(crew.CurrentPosition, wp) < 1f)
+                    {
+                        action.CurrentWaypointIndex++;
+                        if (action.CurrentWaypointIndex >= action.Waypoints.Count)
+                        {
+                            // Final hop to exact target
+                            TickMovement(crew, action.TargetPosition, deltaTime);
+                        }
+                    }
+                }
+                else
+                {
+                    TickMovement(crew, action.TargetPosition, deltaTime);
+                }
                 
                 if (Vector2.Distance(crew.CurrentPosition, action.TargetPosition) < 1f)
                 {
                     action.Phase = ActionPhase.Performing;
                     action.Elapsed = 0f;
                     crew.VisualState = CrewVisualState.Working;
-                    if (verboseLogging)
-                        Debug.Log($"[CrewManager] Phase->Performing crew={crew.Id} action={action.Type} pos={crew.CurrentPosition}");
+                    if (verboseLogging && ShouldTrace(crew))
+                        Debug.Log($"[Trace] Phase->Performing crew={crew.Id} action={action.Type} at={crew.CurrentPosition}");
                 }
                 break;
                 
@@ -208,19 +248,54 @@ public class CrewManager : MonoBehaviour
                     action.Phase = ActionPhase.Returning;
                     action.Elapsed = 0f;
                     crew.VisualState = CrewVisualState.Moving;
-                    if (verboseLogging)
-                        Debug.Log($"[CrewManager] Phase->Returning crew={crew.Id} action={action.Type} returnPos={action.ReturnPosition}");
+
+                    // Build return path along ordered sections for section-based actions
+                    if ((action.Type == ActionType.Repair || action.Type == ActionType.ExtinguishFire) && CrewPositionRegistry.Instance != null)
+                    {
+                        var reg = CrewPositionRegistry.Instance;
+                        string fromSection = !string.IsNullOrEmpty(action.TargetSectionId)
+                            ? action.TargetSectionId
+                            : reg.GetNearestSectionIdByPosition(action.TargetPosition);
+                        string toSection = reg.GetNearestSectionIdByPosition(crew.HomePosition);
+                        var rpath = reg.GetSectionPathPositionsBetween(fromSection, toSection);
+                        if (rpath != null && rpath.Count > 0)
+                        {
+                            if (Vector2.Distance(crew.CurrentPosition, rpath[0]) < 1f && rpath.Count > 1)
+                                rpath.RemoveAt(0);
+                            action.ReturnWaypoints = rpath;
+                            action.ReturnWaypointIndex = 0;
+                        }
+                    }
+                    if (verboseLogging && ShouldTrace(crew))
+                        Debug.Log($"[Trace] Phase->Returning crew={crew.Id} action={action.Type} returnPos={action.ReturnPosition}");
                 }
                 break;
                 
             case ActionPhase.Returning:
-                TickMovement(crew, action.ReturnPosition, deltaTime);
+                // Traverse return waypoints (if any), then final hop to home
+                if (action.ReturnWaypoints != null && action.ReturnWaypoints.Count > 0 && action.ReturnWaypointIndex < action.ReturnWaypoints.Count)
+                {
+                    Vector2 rwp = action.ReturnWaypoints[action.ReturnWaypointIndex];
+                    TickMovement(crew, rwp, deltaTime);
+                    if (Vector2.Distance(crew.CurrentPosition, rwp) < 1f)
+                    {
+                        action.ReturnWaypointIndex++;
+                        if (action.ReturnWaypointIndex >= action.ReturnWaypoints.Count)
+                        {
+                            TickMovement(crew, action.ReturnPosition, deltaTime);
+                        }
+                    }
+                }
+                else
+                {
+                    TickMovement(crew, action.ReturnPosition, deltaTime);
+                }
                 
                 if (Vector2.Distance(crew.CurrentPosition, action.ReturnPosition) < 1f)
                 {
                     CompleteAction(crew);
-                    if (verboseLogging)
-                        Debug.Log($"[CrewManager] Action complete crew={crew.Id} type={action.Type} finalPos={crew.CurrentPosition}");
+                    if (verboseLogging && ShouldTrace(crew))
+                        Debug.Log($"[Trace] ActionComplete crew={crew.Id} type={action.Type} finalPos={crew.CurrentPosition}");
                 }
                 break;
         }
@@ -241,15 +316,13 @@ public class CrewManager : MonoBehaviour
         {
             // Arrived
             crew.CurrentPosition = targetPosition;
-            if (verboseLogging)
-                Debug.Log($"[CrewManager] Movement snap crew={crew.Id} target={targetPosition}");
+            // Movement logs suppressed to avoid spam
         }
         else
         {
             // Keep moving
             crew.CurrentPosition += direction * moveAmount;
-            if (verboseLogging)
-                Debug.Log($"[CrewManager] Movement step crew={crew.Id} pos={crew.CurrentPosition} dir={direction} remaining={(distance - moveAmount):F2}");
+            // Movement logs suppressed to avoid spam
         }
     }
 
@@ -385,9 +458,47 @@ public class CrewManager : MonoBehaviour
         action.Phase = ActionPhase.MoveToTarget;
         action.ReturnPosition = crew.HomePosition;
         action.TargetPosition = GetTargetPositionForAction(action);
+        action.Waypoints = null;
+        action.CurrentWaypointIndex = 0;
         
-        // Skip movement if target is invalid or too close
-        if (action.TargetPosition == Vector2.zero || Vector2.Distance(crew.CurrentPosition, action.TargetPosition) < 5f)
+        // For section-based actions, build waypoint path following ordered sections
+        if (action.Type == ActionType.Repair || action.Type == ActionType.ExtinguishFire)
+        {
+            string sectionId = action.TargetId;
+            if (PlaneManager.Instance != null)
+            {
+                var sys = PlaneManager.Instance.GetSystem(action.TargetId);
+                if (sys != null) sectionId = sys.SectionId;
+            }
+            var reg = CrewPositionRegistry.Instance;
+            if (reg != null)
+            {
+                action.TargetSectionId = sectionId;
+                string startSection = reg.GetNearestSectionIdByPosition(crew.CurrentPosition);
+                var path = reg.GetSectionPathPositionsBetween(startSection, sectionId);
+                if (path != null && path.Count > 0)
+                {
+                    if (Vector2.Distance(crew.CurrentPosition, path[0]) < 1f && path.Count > 1)
+                        path.RemoveAt(0);
+                    action.Waypoints = path;
+                    action.CurrentWaypointIndex = 0;
+                }
+            }
+        }
+
+        // If we have waypoints, skip any that we're already effectively on top of
+        if (action.Waypoints != null && action.Waypoints.Count > 0)
+        {
+            while (action.CurrentWaypointIndex < action.Waypoints.Count &&
+                   Vector2.Distance(crew.CurrentPosition, action.Waypoints[action.CurrentWaypointIndex]) < 1f)
+            {
+                action.CurrentWaypointIndex++;
+            }
+        }
+
+        // Decide whether we are already at the final target
+        bool atFinal = Vector2.Distance(crew.CurrentPosition, action.TargetPosition) < 1f;
+        if (atFinal)
         {
             action.Phase = ActionPhase.Performing;
             crew.VisualState = CrewVisualState.Working;
@@ -396,8 +507,50 @@ public class CrewManager : MonoBehaviour
         {
             crew.VisualState = CrewVisualState.Moving;
         }
-        if (verboseLogging)
-            Debug.Log($"[CrewManager] Action init crew={crew.Id} type={action.Type} targetId={action.TargetId} targetPos={action.TargetPosition} returnPos={action.ReturnPosition} phase={action.Phase}");
+        if (verboseLogging && ShouldTrace(crew))
+        {
+            // Provide exact resolution chain and transform used
+            switch (action.Type)
+            {
+                case ActionType.Repair:
+                case ActionType.ExtinguishFire:
+                {
+                    string sectionId = action.TargetId;
+                    string viaSystem = "none";
+                    if (PlaneManager.Instance != null)
+                    {
+                        var sys = PlaneManager.Instance.GetSystem(action.TargetId);
+                        if (sys != null)
+                        {
+                            sectionId = sys.SectionId;
+                            viaSystem = sys.Id;
+                        }
+                    }
+                    var rect = CrewPositionRegistry.Instance?.GetSectionRect(sectionId);
+                    string rectInfo = rect == null ? "<null>" : $"{BuildPath(rect)} pos={rect.anchoredPosition}";
+                    Debug.Log($"[Trace] ActionInit crew={crew.Id} type={action.Type} inputTargetId={action.TargetId} viaSystem={viaSystem} sectionId={sectionId} sectionRect={rectInfo} targetPos={action.TargetPosition} returnPos={action.ReturnPosition} phase={action.Phase}");
+                    break;
+                }
+                case ActionType.Move:
+                case ActionType.ManStation:
+                {
+                    var rect = CrewPositionRegistry.Instance?.GetStationRect(action.TargetId);
+                    string rectInfo = rect == null ? "<null>" : $"{BuildPath(rect)} pos={rect.anchoredPosition}";
+                    Debug.Log($"[Trace] ActionInit crew={crew.Id} type={action.Type} stationId={action.TargetId} stationRect={rectInfo} targetPos={action.TargetPosition} returnPos={action.ReturnPosition} phase={action.Phase}");
+                    break;
+                }
+                case ActionType.TreatInjury:
+                {
+                    var targetCrew = GetCrewById(action.TargetId);
+                    var tpos = targetCrew != null ? targetCrew.CurrentPosition : Vector2.zero;
+                    Debug.Log($"[Trace] ActionInit crew={crew.Id} type=TreatInjury targetCrewId={action.TargetId} targetCrewPos={tpos} returnPos={action.ReturnPosition} phase={action.Phase}");
+                    break;
+                }
+                default:
+                    Debug.Log($"[Trace] ActionInit crew={crew.Id} type={action.Type} targetId={action.TargetId} targetPos={action.TargetPosition} returnPos={action.ReturnPosition} phase={action.Phase}");
+                    break;
+            }
+        }
     }
     
     /// <summary>
@@ -464,12 +617,12 @@ public class CrewManager : MonoBehaviour
         // Only healthy crew can be assigned actions
         if (crew.Status != CrewStatus.Healthy)
         {
-            if (verboseLogging) Debug.Log($"[CrewManager] Reject assign (not healthy) crew={crew.Id} status={crew.Status}");
+            if (verboseLogging && ShouldTrace(crew)) Debug.Log($"[Trace] Reject assign (not healthy) crew={crew.Id} status={crew.Status}");
             return false;
         }
         if (crew.CurrentAction != null)
         {
-            if (verboseLogging) Debug.Log($"[CrewManager] Reject assign (already has action) crew={crew.Id} currentType={crew.CurrentAction.Type} phase={crew.CurrentAction.Phase}");
+            if (verboseLogging && ShouldTrace(crew)) Debug.Log($"[Trace] Reject assign (already has action) crew={crew.Id} currentType={crew.CurrentAction.Type} phase={crew.CurrentAction.Phase}");
             return false;
         }
 
@@ -554,9 +707,38 @@ public class CrewManager : MonoBehaviour
             }
         }
         OnCrewActionAssigned?.Invoke(crew);
-        if (verboseLogging)
-            Debug.Log($"[CrewManager] Assigned action crew={crew.Id} type={action.Type} targetId={action.TargetId}");
+        if (verboseLogging && ShouldTrace(crew))
+            Debug.Log($"[Trace] Assigned action crew={crew.Id} type={action.Type} targetId={action.TargetId}");
         return true;
+    }
+
+    // ------------------------
+    // Diagnostics helpers
+    // ------------------------
+    public bool ShouldTrace(string crewId)
+    {
+        if (!diagnosticMode) return false;
+        if (string.IsNullOrEmpty(diagnosticCrewId)) return true;
+        return string.Equals(diagnosticCrewId, crewId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public bool ShouldTrace(CrewMember crew)
+    {
+        return crew != null && ShouldTrace(crew.Id);
+    }
+
+    private static string BuildPath(RectTransform rect)
+    {
+        if (rect == null) return "<null>";
+        var t = (Transform)rect;
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        while (t != null)
+        {
+            if (sb.Length == 0) sb.Insert(0, t.name);
+            else sb.Insert(0, $"/{t.name}");
+            t = t.parent;
+        }
+        return sb.ToString();
     }
 
     public bool TryMoveCrew(string crewId, string stationId)

@@ -59,20 +59,13 @@ public class GameStateManager : MonoBehaviour
         // Advance global simulation time
         SimulationTime += dt;
 
-        // Tick core managers (if they exist)
-        if (CrewManager.Instance != null)
+        // If a dedicated SimulationTicker exists, let it drive ticking to avoid double ticks.
+        if (SimulationTicker.Instance == null)
         {
-            CrewManager.Instance.Tick(dt);
-        }
-
-        if (PlaneManager.Instance != null)
-        {
-            PlaneManager.Instance.Tick(dt);
-        }
-
-        if (CrewCommandProcessor.Instance != null)
-        {
-            CrewCommandProcessor.Instance.Tick(dt);
+            // Fallback ticking when no SimulationTicker present.
+            CrewManager.Instance?.Tick(dt);
+            PlaneManager.Instance?.Tick(dt);
+            CrewCommandProcessor.Instance?.Tick(dt);
         }
 
         // Later:

@@ -45,10 +45,6 @@ public class CrewCommandProcessor : MonoBehaviour
         // If you want, you could limit how many are processed per tick.
         int processed = 0;
         int queued = _commandQueue.Count;
-        if (CrewManager.Instance.verboseLogging && queued > 0)
-        {
-            Debug.Log($"[CmdProc] Tick start queued={queued}");
-        }
         while (_commandQueue.Count > 0)
         {
             var cmd = _commandQueue.Dequeue();
@@ -62,20 +58,16 @@ public class CrewCommandProcessor : MonoBehaviour
 
             if (issuingCrew.Status != CrewStatus.Healthy)
             {
-                Debug.Log($"[CmdProc] {issuingCrew.Name} is not healthy; command skipped.");
+                if (CrewManager.Instance.ShouldTrace(issuingCrew))
+                    Debug.Log($"[Trace] Cmd skipped: {issuingCrew.Name} not healthy");
                 continue;
             }
 
             cmd.Execute(CrewManager.Instance, PlaneManager.Instance);
             processed++;
-            if (CrewManager.Instance.verboseLogging)
-            {
-                Debug.Log($"[CmdProc] Executed command type={cmd.GetType().Name} crew={cmd.CrewId}");
-            }
+            if (CrewManager.Instance.verboseLogging && CrewManager.Instance.ShouldTrace(issuingCrew))
+                Debug.Log($"[Trace] Cmd executed type={cmd.GetType().Name} crew={cmd.CrewId}");
         }
-        if (CrewManager.Instance.verboseLogging && processed > 0)
-        {
-            Debug.Log($"[CmdProc] Tick processed={processed}");
-        }
+        // Suppress generic tick logs; diagnostics are crew-scoped above
     }
 }

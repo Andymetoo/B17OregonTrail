@@ -32,6 +32,15 @@ public class CrewAction {
     public ActionPhase Phase = ActionPhase.MoveToTarget;  // Current phase of the action
     public Vector2 TargetPosition;  // Screen position to move to for this action
     public Vector2 ReturnPosition;  // Where to return after action completes
+    
+    // --- PATH WAYPOINTS ---
+    public List<Vector2> Waypoints; // Optional ordered points to traverse before reaching TargetPosition
+    public int CurrentWaypointIndex = 0;
+
+    // --- SECTION CONTEXT (for return pathing)
+    public string TargetSectionId; // resolved section id for section-based actions
+    public List<Vector2> ReturnWaypoints; // path to traverse on the way back to ReturnPosition
+    public int ReturnWaypointIndex = 0;
 
     public bool IsComplete => Elapsed >= Duration;
 }
