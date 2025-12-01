@@ -84,6 +84,9 @@ public class MissionManager : MonoBehaviour
     [Header("Cruise Settings")]
     [Tooltip("If true and DistanceMiles > 0, travel time derives from distance & dynamic speed instead of TravelTime.")] public bool useDistanceForTiming = true;
     [Tooltip("Automatically start first segment on play instead of entering node selection.")] public bool autoStartFirstSegment = true;
+    [Tooltip("Scale factor applied to cruise speed for travel timing (faux speed to keep gameplay snappy).")]
+    public float travelSpeedScale = 8f;
+    
 
     // Quick lookup by Id
     private Dictionary<string, MissionNode> _nodeLookup = new Dictionary<string, MissionNode>();
@@ -178,11 +181,11 @@ public class MissionManager : MonoBehaviour
         {
             return;
         }
-
+    
         // Dynamic speed approach when using distance timing
         if (useDistanceForTiming && _segmentDistanceMiles > 0f)
         {
-            float speedMph = PlaneManager.Instance != null ? PlaneManager.Instance.CurrentCruiseSpeedMph : 0f;
+            float speedMph = PlaneManager.Instance != null ? PlaneManager.Instance.CurrentCruiseSpeedMph * Mathf.Max(0.1f, travelSpeedScale) : 0f;
             // Advance elapsed time
             SegmentElapsed += deltaTime;
             float distanceTraveled = (SegmentElapsed * speedMph) / 3600f; // mph -> miles per second
@@ -192,7 +195,15 @@ public class MissionManager : MonoBehaviour
             OnSegmentProgressChanged?.Invoke(progress);
             if (progress >= 1f)
             {
-                CompleteSegment();
+                // Prevent ending during an active hazard phase
+                if (ChaosSimulator.Instance != null && ChaosSimulator.Instance.IsInHazardPhase)
+                {
+                    // Wait until hazard phase returns to cruise
+                }
+                else
+                {
+                    CompleteSegment();
+                }
             }
         }
         else
@@ -202,8 +213,28 @@ public class MissionManager : MonoBehaviour
             OnSegmentProgressChanged?.Invoke(SegmentProgress01);
             if (SegmentElapsed >= SegmentDuration)
             {
-                CompleteSegment();
+                if (ChaosSimulator.Instance != null && ChaosSimulator.Instance.IsInHazardPhase)
+                {
+                    // Wait until hazard phase returns to cruise
+                }
+                else
+                {
+                    CompleteSegment();
+                }
             }
+        }
+    }
+
+    // Adjust fuel and notify interested systems (used by GameEvent effects)
+    public void AdjustFuel(float delta)
+    {
+        FuelRemaining = Mathf.Max(0f, FuelRemaining + delta);
+        OnFuelChanged?.Invoke(FuelRemaining);
+        var log = EventLogUI.Instance ?? FindObjectOfType<EventLogUI>();
+        if (log != null && Math.Abs(delta) > 0.001f)
+        {
+            string sign = delta >= 0f ? "+" : "";
+            log.Log($"Fuel {sign}{delta:0} (Remaining: {FuelRemaining:0})", Color.yellow);
         }
     }
 
@@ -244,7 +275,7 @@ public class MissionManager : MonoBehaviour
         _segmentDistanceMiles = Mathf.Max(0f, to.DistanceMiles);
         if (useDistanceForTiming && _segmentDistanceMiles > 0f)
         {
-            float speedMph = PlaneManager.Instance != null ? PlaneManager.Instance.CurrentCruiseSpeedMph : 0f;
+            float speedMph = PlaneManager.Instance != null ? PlaneManager.Instance.CurrentCruiseSpeedMph * Mathf.Max(0.1f, travelSpeedScale) : 0f;
             SegmentDuration = _segmentDistanceMiles / Mathf.Max(1f, speedMph) * 3600f; // initial estimate
         }
         else
@@ -252,7 +283,20 @@ public class MissionManager : MonoBehaviour
             SegmentDuration = to.TravelTime; // fallback
         }
 
+        // Configure ChaosSimulator for this leg so it can schedule phases
+        if (ChaosSimulator.Instance != null && to != null)
+        {
+            ChaosSimulator.Instance.ConfigureLeg(
+                to.StartDanger,
+                to.EndDanger,
+                to.PhaseWeights
+            );
+        }
+
         OnSegmentStarted?.Invoke(from, to);
+
+        // Log departure for player feedback
+        EventLogUI.Instance?.Log($"Departing {from.Id} → {to.Id}", Color.white);
 
         // Enter cruise phase if we're not already in it
         if (GameStateManager.Instance != null)
@@ -266,7 +310,7 @@ public class MissionManager : MonoBehaviour
         // Ensure elapsed reflects final state
         if (useDistanceForTiming && _segmentDistanceMiles > 0f)
         {
-            float speedMph = PlaneManager.Instance != null ? PlaneManager.Instance.CurrentCruiseSpeedMph : 0f;
+            float speedMph = PlaneManager.Instance != null ? PlaneManager.Instance.CurrentCruiseSpeedMph * Mathf.Max(0.1f, travelSpeedScale) : 0f;
             SegmentElapsed = _segmentDistanceMiles / Mathf.Max(1f, speedMph) * 3600f;
         }
         else

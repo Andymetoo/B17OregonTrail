@@ -10,23 +10,70 @@ public class ChaosSimulator : MonoBehaviour
 {
     public static ChaosSimulator Instance { get; private set; }
     
-    [Header("Chaos Settings")]
+    [Header("Danger & Intervals")]
     [SerializeField] private bool enableChaos = true;
-    [SerializeField] private float chaosInterval = 15f; // Every 15 seconds something bad happens
-    [SerializeField] private float damageEventChance = 0.4f; // 40% chance
-    [SerializeField] private float fireEventChance = 0.3f; // 30% chance
-    [SerializeField] private float crewInjuryChance = 0.3f; // 30% chance
+    [Tooltip("Event interval when danger=0 (seconds) within hazard phases.")]
+    [SerializeField] private float eventIntervalAtSafe = 20f;
+    [Tooltip("Event interval when danger=1 (seconds) within hazard phases.")]
+    [SerializeField] private float eventIntervalAtDanger = 6f;
+    [Tooltip("Fallback danger when no leg is active (0-1).")]
+    [Range(0f,1f)] [SerializeField] private float defaultDanger = 0.3f;
+
+    [Header("Timing Randomness")]
+    [Tooltip("If true, use an exponential (Poisson) process for event timing; otherwise apply uniform jitter.")]
+    [SerializeField] private bool useExponentialTiming = true;
+    [Tooltip("Uniform jitter fraction around the mean interval when not using exponential timing (e.g., 0.35 => ±35%).")]
+    [Range(0f,1f)] [SerializeField] private float hazardIntervalJitter = 0.35f;
+    [Range(0f,1f)] [SerializeField] private float injuryIntervalJitter = 0.35f;
+
+    [Header("Crew Injury Intervals")]
+    [Tooltip("Crew injury interval when danger=0 (seconds).")]
+    [SerializeField] private float injuryIntervalAtSafe = 40f;
+    [Tooltip("Crew injury interval when danger=1 (seconds).")]
+    [SerializeField] private float injuryIntervalAtDanger = 12f;
     
-    [Header("Damage Settings")]
+    [Header("Event Weights (0-1 ranges, scaled by Danger)")]
+    [Range(0f,1f)] [SerializeField] private float planeDamageWeightMin = 0.2f;
+    [Range(0f,1f)] [SerializeField] private float planeDamageWeightMax = 0.9f;
+    [Range(0f,1f)] [SerializeField] private float fireWeightMin = 0.1f;
+    [Range(0f,1f)] [SerializeField] private float fireWeightMax = 0.7f;
+    [Range(0f,1f)] [SerializeField] private float crewInjuryWeightMin = 0.05f;
+    [Range(0f,1f)] [SerializeField] private float crewInjuryWeightMax = 0.4f;
+
+    [Header("Plane Damage Amount (scaled by Danger)")]
     [SerializeField] private int minDamage = 5;
     [SerializeField] private int maxDamage = 25;
+
+    [Header("Injury Severity Weights (0-1 ranges)")]
+    [Range(0f,1f)] [SerializeField] private float lightSeverityWeightMin = 0.7f;
+    [Range(0f,1f)] [SerializeField] private float lightSeverityWeightMax = 0.3f;
+    [Range(0f,1f)] [SerializeField] private float seriousSeverityWeightMin = 0.25f;
+    [Range(0f,1f)] [SerializeField] private float seriousSeverityWeightMax = 0.5f;
+    [Range(0f,1f)] [SerializeField] private float criticalSeverityWeightMin = 0.05f;
+    [Range(0f,1f)] [SerializeField] private float criticalSeverityWeightMax = 0.2f;
     
-    [Header("Crew Injury Settings")]
-    [SerializeField] private float lightInjuryChance = 0.6f; // Most injuries are light
-    [SerializeField] private float seriousInjuryChance = 0.3f;
-    [SerializeField] private float criticalInjuryChance = 0.1f;
-    
-    private float timeSinceLastChaos;
+    // Phase scheduling
+    public enum HazardPhase { Cruise, Flak, Fighters }
+    [Header("Phase Scheduling Defaults")]
+    [SerializeField] private float phaseMinDuration = 6f;
+    [SerializeField] private float phaseMaxDuration = 14f;
+    [SerializeField] private float cruiseBias = 0.6f; // fallback if no leg weights
+
+    private HazardPhase _currentPhase = HazardPhase.Cruise;
+    private float _phaseTimer;
+    private float _phaseDuration;
+
+    // Leg-configured values
+    private float _legStartDanger = 0f;
+    private float _legEndDanger = 0.6f;
+    private LegPhaseWeights _legPhaseWeights = new LegPhaseWeights();
+
+    public bool IsInHazardPhase => _currentPhase == HazardPhase.Flak || _currentPhase == HazardPhase.Fighters;
+
+    private float timeSinceLastHazard;
+    private float _nextHazardInterval;
+    private float timeSinceLastInjury;
+    private float _nextInjuryInterval;
     
     // Events for UI notifications
     public System.Action<string> OnChaosEvent; // For Oregon Trail style messages
@@ -44,69 +91,163 @@ public class ChaosSimulator : MonoBehaviour
     public void Tick(float deltaTime)
     {
         if (!enableChaos) return;
-        
-        timeSinceLastChaos += deltaTime;
-        
-        if (timeSinceLastChaos >= chaosInterval)
+        // Update leg-driven danger if travelling
+        if (MissionManager.Instance != null && MissionManager.Instance.IsTravelling)
         {
-            GenerateChaosEvent();
-            timeSinceLastChaos = 0f;
+            var t = MissionManager.Instance.SegmentProgress01;
+            float danger = Mathf.Lerp(_legStartDanger, _legEndDanger, t);
+            // Per-phase event interval shortens with higher danger
+            float hazardIntervalMean = Mathf.Lerp(eventIntervalAtSafe, eventIntervalAtDanger, danger);
+            float injuryIntervalMean = Mathf.Lerp(injuryIntervalAtSafe, injuryIntervalAtDanger, CurrentCrewInjuryWeight(danger));
+
+            // Advance current phase timer and maybe transition
+            _phaseTimer += deltaTime;
+            if (_phaseTimer >= _phaseDuration)
+            {
+                ChooseNextPhase();
+                // Re-sample hazard timing on phase change for extra variety
+                _nextHazardInterval = SampleInterval(hazardIntervalMean, hazardIntervalJitter, useExponentialTiming);
+            }
+
+            // Within hazard phases, roll hazard events
+            timeSinceLastHazard += deltaTime;
+            if (IsInHazardPhase)
+            {
+                // Initialize next interval if needed
+                if (_nextHazardInterval <= 0f)
+                {
+                    _nextHazardInterval = SampleInterval(hazardIntervalMean, hazardIntervalJitter, useExponentialTiming);
+                }
+                if (timeSinceLastHazard >= _nextHazardInterval)
+                {
+                    timeSinceLastHazard = 0f;
+                    _nextHazardInterval = SampleInterval(hazardIntervalMean, hazardIntervalJitter, useExponentialTiming);
+                    if (_currentPhase == HazardPhase.Flak)
+                    {
+                        GenerateFlakEvent(danger);
+                    }
+                    else if (_currentPhase == HazardPhase.Fighters)
+                    {
+                        GenerateFighterEvent(danger);
+                    }
+                }
+            }
+
+            // Crew injuries can occur across any phase; frequency scales with danger
+            timeSinceLastInjury += deltaTime;
+            // Initialize next interval if needed
+            if (_nextInjuryInterval <= 0f)
+            {
+                _nextInjuryInterval = SampleInterval(injuryIntervalMean, injuryIntervalJitter, useExponentialTiming);
+            }
+            if (timeSinceLastInjury >= _nextInjuryInterval)
+            {
+                timeSinceLastInjury = 0f;
+                _nextInjuryInterval = SampleInterval(injuryIntervalMean, injuryIntervalJitter, useExponentialTiming);
+                if (Random.value < CurrentCrewInjuryWeight(danger)) GenerateCrewInjuryEvent(danger);
+            }
         }
     }
-    
-    private void GenerateChaosEvent()
+    public void ConfigureLeg(float startDanger, float endDanger, LegPhaseWeights weights)
     {
-        float roll = Random.value;
-        
-        if (roll < damageEventChance)
+        _legStartDanger = Mathf.Clamp01(startDanger);
+        _legEndDanger = Mathf.Clamp01(endDanger);
+        _legPhaseWeights = weights ?? new LegPhaseWeights();
+        // Start in cruise at leg begin
+        _currentPhase = HazardPhase.Cruise;
+        _phaseTimer = 0f;
+        _phaseDuration = Random.Range(phaseMinDuration, phaseMaxDuration);
+        timeSinceLastHazard = 0f;
+        timeSinceLastInjury = 0f;
+        // Initialize randomized intervals
+        float danger = _legStartDanger;
+        _nextHazardInterval = SampleInterval(Mathf.Lerp(eventIntervalAtSafe, eventIntervalAtDanger, danger), hazardIntervalJitter, useExponentialTiming);
+        _nextInjuryInterval = SampleInterval(Mathf.Lerp(injuryIntervalAtSafe, injuryIntervalAtDanger, CurrentCrewInjuryWeight(danger)), injuryIntervalJitter, useExponentialTiming);
+    }
+
+    private void ChooseNextPhase()
+    {
+        _phaseTimer = 0f;
+        _phaseDuration = Random.Range(phaseMinDuration, phaseMaxDuration);
+
+        // Build normalized weights
+        float wCruise = Mathf.Max(0f, _legPhaseWeights.Cruise);
+        float wFlak = Mathf.Max(0f, _legPhaseWeights.Flak);
+        float wFighters = Mathf.Max(0f, _legPhaseWeights.Fighters);
+        float sum = wCruise + wFlak + wFighters;
+        if (sum <= 0.0001f)
         {
-            GenerateDamageEvent();
+            wCruise = cruiseBias; wFlak = (1f - cruiseBias) * 0.5f; wFighters = (1f - cruiseBias) * 0.5f;
+            sum = wCruise + wFlak + wFighters;
         }
-        else if (roll < damageEventChance + fireEventChance)
+        wCruise /= sum; wFlak /= sum; wFighters /= sum;
+
+        float r = Random.value;
+        if (r < wCruise)
         {
-            GenerateFireEvent();
+            _currentPhase = HazardPhase.Cruise;
         }
-        else if (roll < damageEventChance + fireEventChance + crewInjuryChance)
+        else if (r < wCruise + wFlak)
         {
-            GenerateCrewInjuryEvent();
+            _currentPhase = HazardPhase.Flak;
+            EventLogUI.Instance?.Log("Flak bursts ahead!", Color.red);
+            EventPopupUI.Instance?.Show("Flak bursts ahead!", Color.red, pause:false);
+            // Reset hazard timer for new phase
+            timeSinceLastHazard = 0f;
+            _nextHazardInterval = 0f; // force resample on next tick
         }
-        
-        // Reset timer with slight randomness to avoid predictable timing
-        chaosInterval = Random.Range(10f, 20f);
+        else
+        {
+            _currentPhase = HazardPhase.Fighters;
+            EventLogUI.Instance?.Log("Enemy fighters spotted!", Color.red);
+            EventPopupUI.Instance?.Show("Enemy fighters spotted!", Color.red, pause:false);
+            timeSinceLastHazard = 0f;
+            _nextHazardInterval = 0f;
+        }
     }
     
-    private void GenerateDamageEvent()
+    private void GenerateFlakEvent(float danger)
     {
         if (PlaneManager.Instance?.Sections == null || PlaneManager.Instance.Sections.Count == 0) return;
-        
-        // Pick a random section that's not already destroyed
+
         var healthySections = PlaneManager.Instance.Sections.Where(s => s.Integrity > 0).ToList();
         if (healthySections.Count == 0) return;
-        
+
         var section = healthySections[Random.Range(0, healthySections.Count)];
-        int damage = Random.Range(minDamage, maxDamage);
-        
-        PlaneManager.Instance.ApplyHitToSection(section.Id, damage, false, 0f); // No fire for pure damage events
-        
-        Debug.Log($"[Chaos] The {section.Id} takes {damage} damage!");
+        float dmgT = CurrentPlaneDamageWeight(danger);
+        int dmgMin = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, Mathf.Clamp01(dmgT * 0.5f)));
+        int dmgMax = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, Mathf.Clamp01(0.5f + dmgT * 0.5f)));
+        int damage = Random.Range(dmgMin, Mathf.Max(dmgMin+1, dmgMax));
+
+        float fireWeight = CurrentFireWeight(danger);
+        PlaneManager.Instance.ApplyHitToSection(section.Id, damage, true, Mathf.Lerp(0.05f, 0.6f, fireWeight));
+        Debug.Log($"[Chaos] Flak hits {section.Id} for {damage}!");
+        DamageLogUI.Instance?.Log($"Flak hits {section.Id}!", Color.red);
     }
     
-    private void GenerateFireEvent()
+    private void GenerateFighterEvent(float danger)
     {
         if (PlaneManager.Instance?.Sections == null || PlaneManager.Instance.Sections.Count == 0) return;
-        
-        // Pick a random section that's not already on fire
-        var nonBurningSections = PlaneManager.Instance.Sections.Where(s => !s.OnFire && s.Integrity > 0).ToList();
-        if (nonBurningSections.Count == 0) return;
-        
-        var section = nonBurningSections[Random.Range(0, nonBurningSections.Count)];
-        
-        PlaneManager.Instance.ApplyHitToSection(section.Id, 0, true, 1f); // Pure fire event, guaranteed fire
-        
-        Debug.Log($"[Chaos] Fire event triggered in {section.Id}");
+
+        // Fighters strafe: multiple lighter hits, lower fire chance
+        float dmgW = CurrentPlaneDamageWeight(danger);
+        int passes = Random.Range(1, Random.value < dmgW ? 3 : 2);
+        for (int i = 0; i < passes; i++)
+        {
+            var viable = PlaneManager.Instance.Sections.Where(s => s.Integrity > 0).ToList();
+            if (viable.Count == 0) break;
+            var section = viable[Random.Range(0, viable.Count)];
+            int dmgMin = Mathf.RoundToInt(Mathf.Lerp(2, minDamage, 0.5f));
+            int dmgMax = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, dmgW));
+            int damage = Random.Range(dmgMin, Mathf.Max(dmgMin+1, dmgMax));
+            float fireChance = Mathf.Lerp(0.05f, 0.25f, CurrentFireWeight(danger) * 0.7f);
+            PlaneManager.Instance.ApplyHitToSection(section.Id, damage, true, fireChance);
+        }
+        Debug.Log("[Chaos] Fighter pass strafes the bomber!");
+        DamageLogUI.Instance?.Log("Fighter pass!", Color.red);
     }
     
-    private void GenerateCrewInjuryEvent()
+    private void GenerateCrewInjuryEvent(float danger)
     {
         if (CrewManager.Instance?.AllCrew == null || CrewManager.Instance.AllCrew.Count == 0) return;
         
@@ -116,22 +257,15 @@ public class ChaosSimulator : MonoBehaviour
         
         var crewMember = healthyCrew[Random.Range(0, healthyCrew.Count)];
         
-        // Determine injury severity
-        CrewStatus newStatus;
-        float injuryRoll = Random.value;
-        
-        if (injuryRoll < criticalInjuryChance)
-        {
-            newStatus = CrewStatus.Critical;
-        }
-        else if (injuryRoll < criticalInjuryChance + seriousInjuryChance)
-        {
-            newStatus = CrewStatus.Serious;
-        }
-        else
-        {
-            newStatus = CrewStatus.Light;
-        }
+        // Determine injury severity using danger-scaled weights
+        float wLight = Mathf.Max(0.0001f, Mathf.Lerp(lightSeverityWeightMin, lightSeverityWeightMax, danger));
+        float wSerious = Mathf.Max(0.0001f, Mathf.Lerp(seriousSeverityWeightMin, seriousSeverityWeightMax, danger));
+        float wCritical = Mathf.Max(0.0001f, Mathf.Lerp(criticalSeverityWeightMin, criticalSeverityWeightMax, danger));
+        float sum = wLight + wSerious + wCritical;
+        wLight /= sum; wSerious /= sum; wCritical /= sum;
+
+        float r = Random.value;
+        CrewStatus newStatus = r < wCritical ? CrewStatus.Critical : (r < wCritical + wSerious ? CrewStatus.Serious : CrewStatus.Light);
         
         // Apply injury through CrewManager (which will trigger the event)
         CrewManager.Instance.ApplyInjury(crewMember.Id, newStatus);
@@ -150,14 +284,14 @@ public class ChaosSimulator : MonoBehaviour
     /// <summary>
     /// For testing - force chaos events manually
     /// </summary>
-    [ContextMenu("Force Damage Event")]
-    public void ForceDamageEvent() => GenerateDamageEvent();
+    [ContextMenu("Force Flak Event")]
+    public void ForceFlakEvent() => GenerateFlakEvent(0.5f);
     
-    [ContextMenu("Force Fire Event")]
-    public void ForceFireEvent() => GenerateFireEvent();
+    [ContextMenu("Force Fighter Event")]
+    public void ForceFighterEvent() => GenerateFighterEvent(0.5f);
     
     [ContextMenu("Force Crew Injury")]
-    public void ForceCrewInjury() => GenerateCrewInjuryEvent();
+    public void ForceCrewInjury() => GenerateCrewInjuryEvent(0.5f);
     
     /// <summary>
     /// Toggle chaos on/off for peaceful testing
@@ -166,5 +300,31 @@ public class ChaosSimulator : MonoBehaviour
     {
         enableChaos = enabled;
         Debug.Log($"[Chaos] Chaos simulator {(enabled ? "enabled" : "disabled")}");
+    }
+
+    // ---------------------------
+    // Helpers: weight curves
+    // ---------------------------
+    private float CurrentPlaneDamageWeight(float danger) => Mathf.Lerp(planeDamageWeightMin, planeDamageWeightMax, Mathf.Clamp01(danger));
+    private float CurrentFireWeight(float danger) => Mathf.Lerp(fireWeightMin, fireWeightMax, Mathf.Clamp01(danger));
+    private float CurrentCrewInjuryWeight(float danger) => Mathf.Lerp(crewInjuryWeightMin, crewInjuryWeightMax, Mathf.Clamp01(danger));
+
+    // Sample next interval from mean with jitter/exponential randomness
+    private float SampleInterval(float mean, float jitter, bool exponential)
+    {
+        mean = Mathf.Max(0.001f, mean);
+        if (exponential)
+        {
+            // Exponential with mean: -ln(U) * mean (U in (0,1))
+            float u = Mathf.Clamp01(Random.value);
+            u = Mathf.Max(1e-6f, u);
+            return -Mathf.Log(u) * mean;
+        }
+        else
+        {
+            float minMul = Mathf.Max(0f, 1f - jitter);
+            float maxMul = 1f + jitter;
+            return mean * Random.Range(minMul, maxMul);
+        }
     }
 }

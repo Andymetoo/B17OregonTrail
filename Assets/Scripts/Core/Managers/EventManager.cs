@@ -5,6 +5,10 @@ public class EventManager : MonoBehaviour
 {
     public static EventManager Instance { get; private set; }
 
+    [Header("Enable For Travel")]
+    [Tooltip("If false, this manager won't roll events during travel (use ChaosSimulator instead).")]
+    public bool enabledForTravel = false;
+
     [Header("Check Intervals (seconds)")]
     [Tooltip("Safe interval between flak checks (danger=0).")]
     public float flakIntervalSafe = 12f;
@@ -67,6 +71,7 @@ public class EventManager : MonoBehaviour
     /// </summary>
     public void Tick(float deltaTime)
     {
+        if (!enabledForTravel) return;
         // Need mission and game state information to do anything.
         if (MissionManager.Instance == null || GameStateManager.Instance == null)
             return;

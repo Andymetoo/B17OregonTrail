@@ -22,10 +22,38 @@ using TMPro;
     {
         if (Instance != null && Instance != this)
         {
-            Destroy(gameObject);
-            return;
+            // Prefer the instance that has messageText assigned
+            bool currentHasMsg = messageText != null;
+            bool existingHasMsg = Instance.messageText != null;
+            if (currentHasMsg && !existingHasMsg)
+            {
+                Debug.LogWarning("[EventPopupUI] Switching to instance with assigned messageText; removing previous component.");
+                Destroy(Instance);
+                Instance = this;
+            }
+            else
+            {
+                // Keep existing; remove this duplicate component only
+                Debug.LogWarning("[EventPopupUI] Duplicate component found; removing this duplicate to preserve UI.");
+                Destroy(this);
+                return;
+            }
         }
-        Instance = this;
+        else
+        {
+            Instance = this;
+        }
+        DontDestroyOnLoad(gameObject);
+
+        // Auto-wire messageText if missing
+        if (messageText == null)
+        {
+            messageText = GetComponentInChildren<TextMeshProUGUI>(includeInactive: true);
+            if (messageText == null)
+            {
+                Debug.LogWarning("[EventPopupUI] messageText not assigned and not found in children.");
+            }
+        }
 
         if (continueButton != null)
         {
@@ -38,7 +66,11 @@ using TMPro;
     public void Show(string message, Color color, bool pause, System.Action onContinueAction = null)
     {
         onContinue = onContinueAction;
-        if (messageText != null)
+        if (messageText == null)
+        {
+            Debug.LogWarning("[EventPopupUI] messageText not assigned.");
+        }
+        else
         {
             messageText.text = message;
             messageText.color = color;
@@ -48,10 +80,20 @@ using TMPro;
             panel.SetActive(true);
         }
 
-        if (pause && GameStateManager.Instance != null && !GameStateManager.Instance.IsPaused)
+        if (pause)
         {
-            GameStateManager.Instance.PauseGame();
-            wasPausedByPopup = true;
+            // Always pause SimulationTicker to guarantee freeze
+            if (SimulationTicker.Instance != null && !SimulationTicker.Instance.IsPaused)
+            {
+                SimulationTicker.Instance.Pause();
+                wasPausedByPopup = true;
+            }
+            // Also pause via GameStateManager if available
+            if (GameStateManager.Instance != null && !GameStateManager.Instance.IsPaused)
+            {
+                GameStateManager.Instance.PauseGame();
+                wasPausedByPopup = true;
+            }
         }
     }
 
@@ -63,10 +105,18 @@ using TMPro;
         }
         onContinue?.Invoke();
         onContinue = null;
-        if (wasPausedByPopup && GameStateManager.Instance != null)
+        if (wasPausedByPopup)
         {
-            // Resume to Cruise by default; callers can change phase in onContinue
-            GameStateManager.Instance.ResumeGame(GamePhase.Cruise);
+            // Resume SimulationTicker first
+            if (SimulationTicker.Instance != null)
+            {
+                SimulationTicker.Instance.Resume();
+            }
+            // Then resume GameStateManager if present
+            if (GameStateManager.Instance != null)
+            {
+                GameStateManager.Instance.ResumeGame(GamePhase.Cruise);
+            }
         }
         wasPausedByPopup = false;
     }
@@ -75,5 +125,16 @@ using TMPro;
     {
         if (panel != null) panel.SetActive(false);
         wasPausedByPopup = false;
+    }
+
+    // Overload for future GameEvent usage
+    public void Show(GameEvent evt, bool pause)
+    {
+        if (evt == null)
+        {
+            Show("(Null Event)", Color.white, pause);
+            return;
+        }
+        Show(evt.Title + "\n" + evt.Description, evt.DisplayColor, pause, () => evt.ApplyEffects());
     }
 }

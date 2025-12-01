@@ -14,6 +14,12 @@ public class DamageLogUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI logText;
     [SerializeField] private int maxLogEntries = 8;
     [SerializeField] private float messageDisplayTime = 12f; // Longer for important damage events
+
+    [Header("Popup Triggers")]
+    [Tooltip("Show popup when a section starts burning.")] public bool popupOnFireStart = true;
+    [Tooltip("Show popup when a section is destroyed.")] public bool popupOnSectionDestroyed = true;
+    [Tooltip("Show popup on serious/critical crew injury.")] public bool popupOnSeriousCrewInjury = true;
+    [Tooltip("Show popup on any crew death.")] public bool popupOnCrewDeath = true;
     
     private Queue<LogEntry> logEntries = new Queue<LogEntry>();
     
@@ -158,12 +164,20 @@ public class DamageLogUI : MonoBehaviour
     {
         Debug.Log($"[DamageLogUI] OnSectionDestroyed called for {section.Id}");
         AddMessage($"CRITICAL: The {section.Id} has been destroyed!", Color.red);
+        if (popupOnSectionDestroyed)
+        {
+            EventPopupUI.Instance?.Show($"{section.Id} destroyed!", Color.red, pause:false);
+        }
     }
     
     private void OnFireStarted(PlaneSectionState section)
     {
         Debug.Log($"[DamageLogUI] OnFireStarted called for {section.Id}");
         AddMessage($"FIRE breaks out in the {section.Id}!", new Color(1f, 0.3f, 0f)); // bright red-orange
+        if (popupOnFireStart)
+        {
+            EventPopupUI.Instance?.Show($"Fire in {section.Id}!", new Color(1f,0.3f,0f), pause:false);
+        }
     }
     
     private void OnFireExtinguished(PlaneSectionState section)
@@ -204,6 +218,10 @@ public class DamageLogUI : MonoBehaviour
         {
             Debug.Log($"[DamageLogUI] Crew injury: {statusMessage}");
             AddMessage(statusMessage, Color.red);
+            if (popupOnSeriousCrewInjury && (crew.Status == CrewStatus.Serious || crew.Status == CrewStatus.Critical))
+            {
+                EventPopupUI.Instance?.Show(statusMessage, Color.red, pause:false);
+            }
         }
     }
     
@@ -211,6 +229,10 @@ public class DamageLogUI : MonoBehaviour
     {
         Debug.Log($"[DamageLogUI] Crew died: {crew.Name}");
         AddMessage($"CASUALTY: {crew.Name} has died.", new Color(0.5f, 0f, 0f)); // dark red
+        if (popupOnCrewDeath)
+        {
+            EventPopupUI.Instance?.Show($"{crew.Name} has died.", new Color(0.5f,0f,0f), pause:true);
+        }
     }
     
     private void UpdateDisplay()

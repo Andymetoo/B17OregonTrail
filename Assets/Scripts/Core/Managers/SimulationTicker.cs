@@ -9,7 +9,7 @@ public class SimulationTicker : MonoBehaviour
     public static SimulationTicker Instance { get; private set; }
     
     [Header("Simulation Control")]
-    [SerializeField] private bool isPaused = false;
+    [SerializeField] public bool isPaused = false;
     [SerializeField] private float timeScale = 1f;
     [SerializeField] private float tickRate = 30f; // Fixed updates per second
     
@@ -56,6 +56,7 @@ public class SimulationTicker : MonoBehaviour
         EventManager.Instance?.Tick(deltaTime);
         CrewCommandProcessor.Instance?.Tick(deltaTime);
         ChaosSimulator.Instance?.Tick(deltaTime); // Add chaos for sandbox mode
+        EventTriggerManager.Instance?.Tick(deltaTime); // Flavor events
         // EventManager would go here when created
     }
     

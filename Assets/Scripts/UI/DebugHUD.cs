@@ -9,8 +9,10 @@ public class DebugHUD : MonoBehaviour
     public TMPro.TMP_Text phaseText;
     public TMPro.TMP_Text timeText;
     public TMPro.TMP_Text fuelText;
+    public TMPro.TMP_Text speedText;
     public TMPro.TMP_Text nodeText;
     public TMPro.TMP_Text segmentProgressText;
+    public TMPro.TMP_Text legNamesText;
     public TMPro.TMP_Text pendingActionText; // Shows what action is queued
     [Header("Crew Readout (Debug: one crew)")]
     public string watchedCrewId = "Crew_1";
@@ -74,18 +76,29 @@ public class DebugHUD : MonoBehaviour
             var mm = MissionManager.Instance;
             fuelText.text = $"Fuel: {mm.FuelRemaining:F1}";
 
+            // Speed from PlaneManager
+            if (PlaneManager.Instance != null && speedText != null)
+            {
+                float mph = PlaneManager.Instance.CurrentCruiseSpeedMph;
+                speedText.text = $"Speed: {mph:0} mph";
+            }
+
             string currentNode = string.IsNullOrEmpty(mm.CurrentNodeId) ? "None" : mm.CurrentNodeId;
             string nextNode = string.IsNullOrEmpty(mm.NextNodeId) ? "None" : mm.NextNodeId;
 
             nodeText.text = $"Node: {currentNode} -> {nextNode}";
+            if (legNamesText != null)
+            {
+                legNamesText.text = $"Leg: {currentNode} → {nextNode}";
+            }
             if (mm.IsTravelling)
             {
                 float miles = mm.DistanceRemainingMi;
-                segmentProgressText.text = $"Segment: {mm.SegmentProgress01 * 100f:F0}% | Dist: {miles:F1} mi";
+                segmentProgressText.text = $"Miles to next waypoint: {miles:F1} mi";
             }
             else
             {
-                segmentProgressText.text = "Segment: (waiting)";
+                segmentProgressText.text = "Miles to next waypoint: (waiting)";
             }
         }
         

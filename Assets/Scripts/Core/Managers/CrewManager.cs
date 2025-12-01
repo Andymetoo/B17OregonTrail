@@ -113,6 +113,24 @@ public class CrewManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Returns a random healthy crew member or null if none.
+    /// </summary>
+    public CrewMember GetRandomHealthyCrew()
+    {
+        var healthy = new List<CrewMember>();
+        foreach (var c in AllCrew)
+        {
+            if (c != null && c.Status == CrewStatus.Healthy)
+            {
+                healthy.Add(c);
+            }
+        }
+        if (healthy.Count == 0) return null;
+        int idx = UnityEngine.Random.Range(0, healthy.Count);
+        return healthy[idx];
+    }
+
+    /// <summary>
     /// Tick should be called once per simulation update
     /// (GameStateManager controls when time flows).
     /// </summary>

@@ -88,6 +88,13 @@ public class ThreatProfile {
 }
 
 [Serializable]
+public class LegPhaseWeights {
+    [Range(0f,1f)] public float Cruise = 0.6f;
+    [Range(0f,1f)] public float Flak = 0.2f;
+    [Range(0f,1f)] public float Fighters = 0.2f;
+}
+
+[Serializable]
 public class MissionNode {
     public string Id;
     public List<string> ConnectedNodeIds = new List<string>();
@@ -97,6 +104,14 @@ public class MissionNode {
     public float DistanceMiles; // distance to reach this node from the previous one
 
     public ThreatProfile Threats;
+
+    // Leg configuration when travelling TO this node
+    [Header("Leg Danger (0-1) to this node")]
+    [Range(0f,1f)] public float StartDanger = 0f;
+    [Range(0f,1f)] public float EndDanger = 0.6f;
+
+    [Header("Phase Weights (choose next segment type)")]
+    public LegPhaseWeights PhaseWeights = new LegPhaseWeights();
 }
 
 public enum CrewRole {
