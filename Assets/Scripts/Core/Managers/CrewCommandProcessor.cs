@@ -43,6 +43,12 @@ public class CrewCommandProcessor : MonoBehaviour
 
         // For now, process all queued commands immediately.
         // If you want, you could limit how many are processed per tick.
+        int processed = 0;
+        int queued = _commandQueue.Count;
+        if (CrewManager.Instance.verboseLogging && queued > 0)
+        {
+            Debug.Log($"[CmdProc] Tick start queued={queued}");
+        }
         while (_commandQueue.Count > 0)
         {
             var cmd = _commandQueue.Dequeue();
@@ -61,6 +67,15 @@ public class CrewCommandProcessor : MonoBehaviour
             }
 
             cmd.Execute(CrewManager.Instance, PlaneManager.Instance);
+            processed++;
+            if (CrewManager.Instance.verboseLogging)
+            {
+                Debug.Log($"[CmdProc] Executed command type={cmd.GetType().Name} crew={cmd.CrewId}");
+            }
+        }
+        if (CrewManager.Instance.verboseLogging && processed > 0)
+        {
+            Debug.Log($"[CmdProc] Tick processed={processed}");
         }
     }
 }

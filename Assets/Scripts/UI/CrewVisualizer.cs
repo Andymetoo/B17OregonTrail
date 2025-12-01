@@ -52,10 +52,19 @@ public class CrewVisualizer : MonoBehaviour
         if (Vector2.Distance(currentPos, targetPos) > 0.5f)
         {
             rectTransform.anchoredPosition = Vector2.Lerp(currentPos, targetPos, Time.deltaTime * smoothing);
+            // Optional verbose logging using CrewManager toggle
+            if (CrewManager.Instance != null && CrewManager.Instance.verboseLogging)
+            {
+                Debug.Log($"[CrewVisualizer] {crew.Id} lerp pos={rectTransform.anchoredPosition} target={targetPos} state={crew.VisualState}");
+            }
         }
         else
         {
             rectTransform.anchoredPosition = targetPos;
+            if (CrewManager.Instance != null && CrewManager.Instance.verboseLogging)
+            {
+                Debug.Log($"[CrewVisualizer] {crew.Id} snap target={targetPos} state={crew.VisualState}");
+            }
         }
         
         UpdateSprite();

@@ -21,6 +21,13 @@ public class CrewManager : MonoBehaviour
     private readonly HashSet<string> _extinguishSectionTargets = new HashSet<string>(); // sectionId being extinguished
     private readonly HashSet<string> _repairSectionTargets = new HashSet<string>();     // sectionId being repaired
 
+    // Toggle for deep diagnostic logging
+    [Header("Debug")]
+    public bool verboseLogging = true;
+
+    // Initialization gate to avoid ticking before positions are resolved
+    private bool _positionsInitialized = false;
+
     private void Awake()
     {
         if (Instance != null)
@@ -33,7 +40,17 @@ public class CrewManager : MonoBehaviour
     
     private void Start()
     {
+        // Delay one frame so any UI layout adjustments finalize before we read anchoredPositions
+        StartCoroutine(DelayedInitPositions());
+    }
+
+    private System.Collections.IEnumerator DelayedInitPositions()
+    {
+        yield return null; // wait one frame
         InitializeCrewPositions();
+        ResetAllCrewState();
+        _positionsInitialized = true;
+        if (verboseLogging) Debug.Log("[CrewManager] Positions initialized.");
     }
     
     /// <summary>
@@ -46,15 +63,44 @@ public class CrewManager : MonoBehaviour
             Debug.LogError("[CrewManager] CrewPositionRegistry not found! Crew will not have valid positions.");
             return;
         }
-        
+        List<string> missingStations = new List<string>();
         foreach (var crew in AllCrew)
         {
             string stationId = !string.IsNullOrEmpty(crew.CurrentStationId) ? crew.CurrentStationId : crew.Id;
             Vector2 homePos = CrewPositionRegistry.Instance.GetStationPosition(stationId);
-            
+
             crew.HomePosition = homePos;
             crew.CurrentPosition = homePos;
+
+            if (homePos == Vector2.zero)
+            {
+                missingStations.Add(stationId);
+            }
         }
+        if (missingStations.Count > 0)
+        {
+            Debug.LogWarning($"[CrewManager] Missing station position entries for: {string.Join(", ", missingStations)}. Add them to CrewPositionRegistry.stationPositions.");
+        }
+    }
+
+    private void ResetAllCrewState()
+    {
+        foreach (var crew in AllCrew)
+        {
+            if (crew.CurrentAction != null)
+            {
+                Debug.LogWarning($"[CrewManager] Clearing lingering action '{crew.CurrentAction.Type}' for crew '{crew.Name}' at start.");
+            }
+            crew.CurrentAction = null;
+            crew.VisualState = CrewVisualState.IdleAtStation;
+            crew.CurrentPosition = crew.HomePosition;
+            if (verboseLogging)
+            {
+                Debug.Log($"[CrewManager] Reset: id={crew.Id} station={crew.CurrentStationId} home={crew.HomePosition}");
+            }
+        }
+        if (verboseLogging)
+            Debug.Log("[CrewManager] ResetAllCrewState complete.");
     }
 
     /// <summary>
@@ -63,6 +109,7 @@ public class CrewManager : MonoBehaviour
     /// </summary>
     public void Tick(float deltaTime)
     {
+        if (!_positionsInitialized) return; // Do not tick movement/actions until positions ready
         foreach (var crew in AllCrew)
         {
             TickInjuries(crew, deltaTime);
@@ -125,8 +172,15 @@ public class CrewManager : MonoBehaviour
             CancelCurrentAction(crew, "Crew became injured or incapacitated");
             return;
         }
-        
         var action = crew.CurrentAction;
+
+        // Treat Idle as no action: immediately clear and stay at station
+        if (action.Type == ActionType.Idle)
+        {
+            crew.CurrentAction = null;
+            crew.VisualState = CrewVisualState.IdleAtStation;
+            return;
+        }
         
         // Handle multi-phase actions (move → perform → return)
         switch (action.Phase)
@@ -139,6 +193,8 @@ public class CrewManager : MonoBehaviour
                     action.Phase = ActionPhase.Performing;
                     action.Elapsed = 0f;
                     crew.VisualState = CrewVisualState.Working;
+                    if (verboseLogging)
+                        Debug.Log($"[CrewManager] Phase->Performing crew={crew.Id} action={action.Type} pos={crew.CurrentPosition}");
                 }
                 break;
                 
@@ -152,6 +208,8 @@ public class CrewManager : MonoBehaviour
                     action.Phase = ActionPhase.Returning;
                     action.Elapsed = 0f;
                     crew.VisualState = CrewVisualState.Moving;
+                    if (verboseLogging)
+                        Debug.Log($"[CrewManager] Phase->Returning crew={crew.Id} action={action.Type} returnPos={action.ReturnPosition}");
                 }
                 break;
                 
@@ -161,6 +219,8 @@ public class CrewManager : MonoBehaviour
                 if (Vector2.Distance(crew.CurrentPosition, action.ReturnPosition) < 1f)
                 {
                     CompleteAction(crew);
+                    if (verboseLogging)
+                        Debug.Log($"[CrewManager] Action complete crew={crew.Id} type={action.Type} finalPos={crew.CurrentPosition}");
                 }
                 break;
         }
@@ -181,11 +241,15 @@ public class CrewManager : MonoBehaviour
         {
             // Arrived
             crew.CurrentPosition = targetPosition;
+            if (verboseLogging)
+                Debug.Log($"[CrewManager] Movement snap crew={crew.Id} target={targetPosition}");
         }
         else
         {
             // Keep moving
             crew.CurrentPosition += direction * moveAmount;
+            if (verboseLogging)
+                Debug.Log($"[CrewManager] Movement step crew={crew.Id} pos={crew.CurrentPosition} dir={direction} remaining={(distance - moveAmount):F2}");
         }
     }
 
@@ -332,6 +396,8 @@ public class CrewManager : MonoBehaviour
         {
             crew.VisualState = CrewVisualState.Moving;
         }
+        if (verboseLogging)
+            Debug.Log($"[CrewManager] Action init crew={crew.Id} type={action.Type} targetId={action.TargetId} targetPos={action.TargetPosition} returnPos={action.ReturnPosition} phase={action.Phase}");
     }
     
     /// <summary>
@@ -354,19 +420,34 @@ public class CrewManager : MonoBehaviour
                 {
                     var system = PlaneManager.Instance.GetSystem(action.TargetId);
                     string sectionId = system != null ? system.SectionId : action.TargetId;
-                    return CrewPositionRegistry.Instance.GetSectionPosition(sectionId);
+                    var pos = CrewPositionRegistry.Instance.GetSectionPosition(sectionId);
+                    if (pos == Vector2.zero)
+                    {
+                        Debug.LogWarning($"[CrewManager] Target section '{sectionId}' position unresolved (0,0). Check CrewPositionRegistry sectionPositions list.");
+                    }
+                    return pos;
                 }
                 return Vector2.zero;
                 
             case ActionType.TreatInjury:
                 // Move to target crew's current position
                 var targetCrew = GetCrewById(action.TargetId);
-                return targetCrew != null ? targetCrew.CurrentPosition : Vector2.zero;
+                if (targetCrew == null)
+                {
+                    Debug.LogWarning($"[CrewManager] TreatInjury target crew '{action.TargetId}' not found.");
+                    return Vector2.zero;
+                }
+                return targetCrew.CurrentPosition;
                 
             case ActionType.Move:
             case ActionType.ManStation:
                 // Move to station position
-                return CrewPositionRegistry.Instance.GetStationPosition(action.TargetId);
+                var sPos = CrewPositionRegistry.Instance.GetStationPosition(action.TargetId);
+                if (sPos == Vector2.zero)
+                {
+                    Debug.LogWarning($"[CrewManager] Station target '{action.TargetId}' position unresolved (0,0). Check CrewPositionRegistry stationPositions list.");
+                }
+                return sPos;
                 
             default:
                 return Vector2.zero;
@@ -381,8 +462,16 @@ public class CrewManager : MonoBehaviour
         // Basic validation examples:
         if (crew.Status == CrewStatus.Dead) return false;
         // Only healthy crew can be assigned actions
-        if (crew.Status != CrewStatus.Healthy) return false;
-        if (crew.CurrentAction != null) return false;
+        if (crew.Status != CrewStatus.Healthy)
+        {
+            if (verboseLogging) Debug.Log($"[CrewManager] Reject assign (not healthy) crew={crew.Id} status={crew.Status}");
+            return false;
+        }
+        if (crew.CurrentAction != null)
+        {
+            if (verboseLogging) Debug.Log($"[CrewManager] Reject assign (already has action) crew={crew.Id} currentType={crew.CurrentAction.Type} phase={crew.CurrentAction.Phase}");
+            return false;
+        }
 
         // Enforce exclusive target locks
         if (action != null)
@@ -465,6 +554,8 @@ public class CrewManager : MonoBehaviour
             }
         }
         OnCrewActionAssigned?.Invoke(crew);
+        if (verboseLogging)
+            Debug.Log($"[CrewManager] Assigned action crew={crew.Id} type={action.Type} targetId={action.TargetId}");
         return true;
     }
 
