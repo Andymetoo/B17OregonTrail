@@ -78,7 +78,15 @@ public class DebugHUD : MonoBehaviour
             string nextNode = string.IsNullOrEmpty(mm.NextNodeId) ? "None" : mm.NextNodeId;
 
             nodeText.text = $"Node: {currentNode} -> {nextNode}";
-            segmentProgressText.text = $"Segment: {mm.SegmentProgress01 * 100f:F0}%";
+            if (mm.IsTravelling)
+            {
+                float miles = mm.DistanceRemainingMi;
+                segmentProgressText.text = $"Segment: {mm.SegmentProgress01 * 100f:F0}% | Dist: {miles:F1} mi";
+            }
+            else
+            {
+                segmentProgressText.text = "Segment: (waiting)";
+            }
         }
         
         // Show pending action status

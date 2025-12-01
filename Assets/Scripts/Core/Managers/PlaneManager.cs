@@ -16,6 +16,12 @@ public class PlaneManager : MonoBehaviour
     /// </summary>
     public List<PlaneSystemState> Systems = new List<PlaneSystemState>();
 
+    [Header("Cruise Speed")]
+    [Tooltip("Base cruise speed (all engines operational). Miles per hour.")]
+    public float baseCruiseSpeedMph = 180f;
+    [Tooltip("Minimum cruise speed when all engines are destroyed.")]
+    public float minCruiseSpeedMph = 60f;
+
     // Simple fire damage tuning
     [Header("Fire Settings")]
     [Tooltip("Damage per second to section integrity while on fire.")]
@@ -41,6 +47,28 @@ public class PlaneManager : MonoBehaviour
         }
 
         Instance = this;
+    }
+
+    /// <summary>
+    /// Current dynamic cruise speed based on operational engines.
+    /// </summary>
+    public float CurrentCruiseSpeedMph
+    {
+        get
+        {
+            int engineCount = 0; int operational = 0;
+            foreach (var sys in Systems)
+            {
+                if (sys.Type == SystemType.Engine)
+                {
+                    engineCount++;
+                    if (sys.Status == SystemStatus.Operational) operational++;
+                }
+            }
+            if (engineCount == 0) return baseCruiseSpeedMph;
+            float fraction = (float)operational / engineCount;
+            return Mathf.Lerp(minCruiseSpeedMph, baseCruiseSpeedMph, fraction);
+        }
     }
 
     /// <summary>

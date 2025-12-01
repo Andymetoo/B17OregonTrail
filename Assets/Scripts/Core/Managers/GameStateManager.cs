@@ -65,6 +65,8 @@ public class GameStateManager : MonoBehaviour
             // Fallback ticking when no SimulationTicker present.
             CrewManager.Instance?.Tick(dt);
             PlaneManager.Instance?.Tick(dt);
+            MissionManager.Instance?.Tick(dt);
+            EventManager.Instance?.Tick(dt);
             CrewCommandProcessor.Instance?.Tick(dt);
         }
 

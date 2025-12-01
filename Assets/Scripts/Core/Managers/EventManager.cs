@@ -6,14 +6,24 @@ public class EventManager : MonoBehaviour
     public static EventManager Instance { get; private set; }
 
     [Header("Check Intervals (seconds)")]
-    [Tooltip("How often to roll for flak while in a dangerous area.")]
-    public float flakCheckInterval = 5f;
+    [Tooltip("Safe interval between flak checks (danger=0).")]
+    public float flakIntervalSafe = 12f;
+    [Tooltip("Interval between flak checks at max danger (danger=1).")]
+    public float flakIntervalDanger = 4f;
+    [Tooltip("Safe interval between fighter checks (danger=0).")]
+    public float fighterIntervalSafe = 25f;
+    [Tooltip("Interval between fighter checks at max danger (danger=1).")]
+    public float fighterIntervalDanger = 8f;
+    [Tooltip("Safe interval between incident checks (danger=0).")]
+    public float incidentIntervalSafe = 40f;
+    [Tooltip("Interval between incident checks at max danger (danger=1).")]
+    public float incidentIntervalDanger = 15f;
 
-    [Tooltip("How often to roll for fighter attacks.")]
-    public float fighterCheckInterval = 10f;
-
-    [Tooltip("How often to roll for generic incidents (crew accidents, etc.).")]
-    public float incidentCheckInterval = 15f;
+    [Header("Danger Scaling 0-1")] 
+    [Range(0f,1f)] public float danger01 = 0f;
+    [Tooltip("If true, danger value auto-lerps from start to end of segment using progress.")] public bool autoDangerByProgress = true;
+    [Range(0f,1f)] public float minSegmentDanger = 0f;
+    [Range(0f,1f)] public float maxSegmentDanger = 0.6f;
 
     [Header("Flak Settings")]
     [Tooltip("Base damage from a single flak hit.")]
@@ -31,6 +41,15 @@ public class EventManager : MonoBehaviour
     public event Action OnFlakEvent;              // Fired when flak actually hits
     public event Action OnFighterEncounter;       // Fired when fighters spawn
     public event Action OnIncidentEvent;          // Generic non-combat incident
+
+    private void Start()
+    {
+        // Reset interval timers whenever a new segment starts
+        if (MissionManager.Instance != null)
+        {
+            MissionManager.Instance.OnSegmentStarted += (_, __) => ResetTimers();
+        }
+    }
 
     private void Awake()
     {
@@ -68,6 +87,17 @@ public class EventManager : MonoBehaviour
             return;
 
         var threats = nextNode.Threats;
+
+        // Auto danger progression (optional)
+        if (autoDangerByProgress)
+        {
+            danger01 = Mathf.Lerp(minSegmentDanger, maxSegmentDanger, MissionManager.Instance.SegmentProgress01);
+        }
+
+        // Compute dynamic intervals based on danger (higher danger = shorter intervals)
+        float flakCheckInterval = Mathf.Lerp(flakIntervalSafe, flakIntervalDanger, danger01);
+        float fighterCheckInterval = Mathf.Lerp(fighterIntervalSafe, fighterIntervalDanger, danger01);
+        float incidentCheckInterval = Mathf.Lerp(incidentIntervalSafe, incidentIntervalDanger, danger01);
 
         // Advance internal timers
         _flakTimer += deltaTime;
@@ -113,7 +143,12 @@ public class EventManager : MonoBehaviour
                 PlaneManager.Instance.ApplyRandomHit(flakDamage, canStartFire: true, fireStartChance: flakFireStartChance);
             }
 
+            EventLogUI.Instance?.Log("Flak bursts ahead!", Color.red);
             OnFlakEvent?.Invoke();
+            // Pause flow and show a modal popup like Oregon Trail (if available)
+            EventPopupUI.Instance?.Show("Flak bursts ahead!", Color.red, pause:true);
+            // Slight danger bump on flak event (manual escalation)
+            danger01 = Mathf.Clamp01(danger01 + 0.05f);
         }
     }
 
@@ -123,12 +158,13 @@ public class EventManager : MonoBehaviour
         if (roll <= threats.FighterChance)
         {
             // Notify systems that we've entered a fighter encounter.
-            OnFighterEncounter?.Invoke();
-
-            if (GameStateManager.Instance != null)
-            {
-                GameStateManager.Instance.EnterFighterCombat();
-            }
+            EventLogUI.Instance?.Log("Enemy fighters spotted!", Color.red);
+            // Pause and notify player, switch to FighterCombat after continue
+            EventPopupUI.Instance?.Show("Enemy fighters spotted!", Color.red, pause:true, onContinueAction: () => {
+                OnFighterEncounter?.Invoke();
+                GameStateManager.Instance?.EnterFighterCombat();
+            });
+            danger01 = Mathf.Clamp01(danger01 + 0.1f);
 
             // In a real implementation, you might also notify a CombatManager
             // to set up specific fighter waves based on threat severity, etc.
@@ -143,12 +179,15 @@ public class EventManager : MonoBehaviour
             // For now, just fire an event.
             // Later, you can implement actual incident logic (crew injury,
             // mechanical failure, navigation error, etc.)
+            EventLogUI.Instance?.Log("Radio chatter: Allied crew hails you.", Color.cyan);
             OnIncidentEvent?.Invoke();
+            EventPopupUI.Instance?.Show("Radio chatter: Allied crew hails you.", Color.cyan, pause:true);
 
             // Example stub:
             // - random crew member gets Light injury
             // - or random system gets Damaged
             // You can hook those into CrewManager / PlaneManager later.
+            danger01 = Mathf.Clamp01(danger01 + 0.02f);
         }
     }
 
@@ -158,5 +197,15 @@ public class EventManager : MonoBehaviour
         _flakTimer = 0f;
         _fighterTimer = 0f;
         _incidentTimer = 0f;
+        // Optionally reset danger on new leg start
+        if (autoDangerByProgress) danger01 = minSegmentDanger;
+    }
+
+    /// <summary>
+    /// External systems/UI can set danger manually (0-1).
+    /// </summary>
+    public void SetDanger(float value)
+    {
+        danger01 = Mathf.Clamp01(value);
     }
 }

@@ -43,14 +43,47 @@ public class MissionManager : MonoBehaviour
     public float SegmentDuration { get; private set; }
 
     /// <summary>
+    /// Miles for the current leg (taken from destination node DistanceMiles).
+    /// </summary>
+    private float _segmentDistanceMiles;
+
+    /// <summary>
     /// 0–1 progress along the current leg (0 = just left, 1 = arrived).
     /// </summary>
     public float SegmentProgress01 => SegmentDuration > 0f ? Mathf.Clamp01(SegmentElapsed / SegmentDuration) : 0f;
 
     /// <summary>
+    /// Miles for the current leg based on the destination node's DistanceMiles.
+    /// </summary>
+    public float CurrentLegDistanceMi
+    {
+        get
+        {
+            var next = GetNode(NextNodeId);
+            return next != null ? Mathf.Max(0f, next.DistanceMiles) : 0f;
+        }
+    }
+
+    /// <summary>
+    /// Remaining miles on the current leg.
+    /// </summary>
+    public float DistanceRemainingMi
+    {
+        get
+        {
+            float total = CurrentLegDistanceMi;
+            return total > 0f ? Mathf.Max(0f, total * (1f - SegmentProgress01)) : 0f;
+        }
+    }
+
+    /// <summary>
     /// Are we currently moving along a segment between two nodes?
     /// </summary>
     public bool IsTravelling => !string.IsNullOrEmpty(NextNodeId);
+
+    [Header("Cruise Settings")]
+    [Tooltip("If true and DistanceMiles > 0, travel time derives from distance & dynamic speed instead of TravelTime.")] public bool useDistanceForTiming = true;
+    [Tooltip("Automatically start first segment on play instead of entering node selection.")] public bool autoStartFirstSegment = true;
 
     // Quick lookup by Id
     private Dictionary<string, MissionNode> _nodeLookup = new Dictionary<string, MissionNode>();
@@ -108,10 +141,26 @@ public class MissionManager : MonoBehaviour
         SegmentElapsed = 0f;
         SegmentDuration = 0f;
 
-        // At start of mission, we usually want to go to node selection.
-        if (GameStateManager.Instance != null)
+        if (autoStartFirstSegment)
         {
-            GameStateManager.Instance.EnterNodeSelection();
+            // Attempt to auto start cruise toward first connected node
+            var startNode = GetNode(CurrentNodeId);
+            if (startNode != null && startNode.ConnectedNodeIds.Count > 0)
+            {
+                var nextId = startNode.ConnectedNodeIds[0];
+                var nextNode = GetNode(nextId);
+                if (nextNode != null)
+                {
+                    StartSegment(startNode, nextNode);
+                    return;
+                }
+            }
+            // Fallback: enter cruise even if no segment
+            GameStateManager.Instance?.SetPhase(GamePhase.Cruise);
+        }
+        else
+        {
+            GameStateManager.Instance?.EnterNodeSelection();
         }
     }
 
@@ -130,12 +179,31 @@ public class MissionManager : MonoBehaviour
             return;
         }
 
-        SegmentElapsed += deltaTime;
-        OnSegmentProgressChanged?.Invoke(SegmentProgress01);
-
-        if (SegmentElapsed >= SegmentDuration)
+        // Dynamic speed approach when using distance timing
+        if (useDistanceForTiming && _segmentDistanceMiles > 0f)
         {
-            CompleteSegment();
+            float speedMph = PlaneManager.Instance != null ? PlaneManager.Instance.CurrentCruiseSpeedMph : 0f;
+            // Advance elapsed time
+            SegmentElapsed += deltaTime;
+            float distanceTraveled = (SegmentElapsed * speedMph) / 3600f; // mph -> miles per second
+            float progress = Mathf.Clamp01(distanceTraveled / _segmentDistanceMiles);
+            // Derive a dynamic duration for compatibility (time if speed stayed constant)
+            SegmentDuration = _segmentDistanceMiles / Mathf.Max(1f, speedMph) * 3600f;
+            OnSegmentProgressChanged?.Invoke(progress);
+            if (progress >= 1f)
+            {
+                CompleteSegment();
+            }
+        }
+        else
+        {
+            // Legacy travel time based approach
+            SegmentElapsed += deltaTime;
+            OnSegmentProgressChanged?.Invoke(SegmentProgress01);
+            if (SegmentElapsed >= SegmentDuration)
+            {
+                CompleteSegment();
+            }
         }
     }
 
@@ -173,7 +241,16 @@ public class MissionManager : MonoBehaviour
         CurrentNodeId = from.Id;
         NextNodeId = to.Id;
         SegmentElapsed = 0f;
-        SegmentDuration = to.TravelTime;
+        _segmentDistanceMiles = Mathf.Max(0f, to.DistanceMiles);
+        if (useDistanceForTiming && _segmentDistanceMiles > 0f)
+        {
+            float speedMph = PlaneManager.Instance != null ? PlaneManager.Instance.CurrentCruiseSpeedMph : 0f;
+            SegmentDuration = _segmentDistanceMiles / Mathf.Max(1f, speedMph) * 3600f; // initial estimate
+        }
+        else
+        {
+            SegmentDuration = to.TravelTime; // fallback
+        }
 
         OnSegmentStarted?.Invoke(from, to);
 
@@ -186,7 +263,16 @@ public class MissionManager : MonoBehaviour
 
     private void CompleteSegment()
     {
-        SegmentElapsed = SegmentDuration;
+        // Ensure elapsed reflects final state
+        if (useDistanceForTiming && _segmentDistanceMiles > 0f)
+        {
+            float speedMph = PlaneManager.Instance != null ? PlaneManager.Instance.CurrentCruiseSpeedMph : 0f;
+            SegmentElapsed = _segmentDistanceMiles / Mathf.Max(1f, speedMph) * 3600f;
+        }
+        else
+        {
+            SegmentElapsed = SegmentDuration;
+        }
         var arrivedNode = GetNode(NextNodeId);
 
         // Update current node
@@ -194,6 +280,7 @@ public class MissionManager : MonoBehaviour
         NextNodeId = null;
         SegmentElapsed = 0f;
         SegmentDuration = 0f;
+        _segmentDistanceMiles = 0f;
 
         // Consume fuel based on the node we arrived at
         if (arrivedNode != null)
@@ -231,4 +318,6 @@ public class MissionManager : MonoBehaviour
         _nodeLookup.TryGetValue(nodeId, out var node);
         return node;
     }
+
+    // Speed now sourced from PlaneManager.CurrentCruiseSpeedMph
 }

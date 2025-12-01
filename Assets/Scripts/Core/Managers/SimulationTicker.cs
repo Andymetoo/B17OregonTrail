@@ -53,6 +53,7 @@ public class SimulationTicker : MonoBehaviour
         CrewManager.Instance?.Tick(deltaTime);
         PlaneManager.Instance?.Tick(deltaTime);
         MissionManager.Instance?.Tick(deltaTime);
+        EventManager.Instance?.Tick(deltaTime);
         CrewCommandProcessor.Instance?.Tick(deltaTime);
         ChaosSimulator.Instance?.Tick(deltaTime); // Add chaos for sandbox mode
         // EventManager would go here when created

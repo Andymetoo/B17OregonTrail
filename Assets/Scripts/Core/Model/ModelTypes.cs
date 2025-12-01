@@ -94,6 +94,7 @@ public class MissionNode {
 
     public float TravelTime; // seconds along this leg
     public float FuelCost;   // fuel burned to traverse this node
+    public float DistanceMiles; // distance to reach this node from the previous one
 
     public ThreatProfile Threats;
 }
