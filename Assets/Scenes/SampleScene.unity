@@ -942,15 +942,16 @@ MonoBehaviour:
   idleSprite: {fileID: 21300000, guid: 6cce3a9430ac60c4790cba167daff3f2, type: 3}
   movingSprite: {fileID: 21300000, guid: 04dec49ef444b634f9378d177eb0e4d8, type: 3}
   workingSprite: {fileID: 21300000, guid: 14a9ec5a1932bc74a970548b7daa8305, type: 3}
-  incapacitatedSprite: {fileID: 0}
+  incapacitatedSprite: {fileID: 21300000, guid: 690c1b695eb5a3546ab74296578ef06e, type: 3}
   smoothing: 8
   baseColor: {r: 0.15948117, g: 0.45911938, b: 0.15159598, a: 1}
-  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 0.4}
-  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 0.35}
-  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 0.45}
-  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
+  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 1}
+  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 1}
+  seriousInjuryTint: {r: 1, g: 0.25, b: 0, a: 0.4}
+  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 1}
+  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 1}
   additiveTints: 1
-  dimWhenIncapacitated: 1
+  dimWhenIncapacitated: 0
   incapacitatedAlpha: 0.3
 --- !u!222 &181494795
 CanvasRenderer:
@@ -2235,15 +2236,16 @@ MonoBehaviour:
   idleSprite: {fileID: 21300000, guid: 296563ce897fc6448ae09d747d96db45, type: 3}
   movingSprite: {fileID: 21300000, guid: 04dec49ef444b634f9378d177eb0e4d8, type: 3}
   workingSprite: {fileID: 21300000, guid: 14a9ec5a1932bc74a970548b7daa8305, type: 3}
-  incapacitatedSprite: {fileID: 0}
+  incapacitatedSprite: {fileID: 21300000, guid: 690c1b695eb5a3546ab74296578ef06e, type: 3}
   smoothing: 8
   baseColor: {r: 0.15948117, g: 0.45911938, b: 0.15159598, a: 1}
-  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 0.4}
-  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 0.35}
-  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 0.45}
-  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
+  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 1}
+  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 1}
+  seriousInjuryTint: {r: 1, g: 0.25, b: 0, a: 0.4}
+  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 1}
+  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 1}
   additiveTints: 1
-  dimWhenIncapacitated: 1
+  dimWhenIncapacitated: 0
   incapacitatedAlpha: 0.3
 --- !u!222 &281102351
 CanvasRenderer:
@@ -2657,15 +2659,16 @@ MonoBehaviour:
   idleSprite: {fileID: 21300000, guid: 3d447a0dec24827489e36f5f737b147d, type: 3}
   movingSprite: {fileID: 21300000, guid: 04dec49ef444b634f9378d177eb0e4d8, type: 3}
   workingSprite: {fileID: 21300000, guid: 14a9ec5a1932bc74a970548b7daa8305, type: 3}
-  incapacitatedSprite: {fileID: 0}
+  incapacitatedSprite: {fileID: 21300000, guid: 690c1b695eb5a3546ab74296578ef06e, type: 3}
   smoothing: 8
   baseColor: {r: 0.15948117, g: 0.45911938, b: 0.15159598, a: 1}
-  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 0.4}
-  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 0.35}
-  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 0.45}
-  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
+  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 1}
+  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 1}
+  seriousInjuryTint: {r: 1, g: 0.25, b: 0, a: 0.4}
+  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 1}
+  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 1}
   additiveTints: 1
-  dimWhenIncapacitated: 1
+  dimWhenIncapacitated: 0
   incapacitatedAlpha: 0.3
 --- !u!222 &336939504
 CanvasRenderer:
@@ -3197,6 +3200,7 @@ MonoBehaviour:
     InjuryTimer: 0
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
+    HomeOffset: {x: 0, y: 0}
     MoveSpeed: 50
     VisualState: 0
   - Id: Navigator
@@ -3220,6 +3224,7 @@ MonoBehaviour:
     InjuryTimer: 0
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
+    HomeOffset: {x: 0, y: 0}
     MoveSpeed: 50
     VisualState: 0
   - Id: Copilot
@@ -3243,6 +3248,7 @@ MonoBehaviour:
     InjuryTimer: 0
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
+    HomeOffset: {x: -2, y: -1}
     MoveSpeed: 50
     VisualState: 0
   - Id: Pilot
@@ -3266,6 +3272,7 @@ MonoBehaviour:
     InjuryTimer: 0
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
+    HomeOffset: {x: 3, y: 1}
     MoveSpeed: 50
     VisualState: 0
   - Id: Engineer
@@ -3289,6 +3296,7 @@ MonoBehaviour:
     InjuryTimer: 0
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
+    HomeOffset: {x: 0, y: 0}
     MoveSpeed: 50
     VisualState: 0
   - Id: RadioOP
@@ -3312,6 +3320,7 @@ MonoBehaviour:
     InjuryTimer: 0
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
+    HomeOffset: {x: 0, y: 0}
     MoveSpeed: 50
     VisualState: 0
   - Id: BallTurretGunner
@@ -3335,6 +3344,7 @@ MonoBehaviour:
     InjuryTimer: 0
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
+    HomeOffset: {x: 0, y: 0}
     MoveSpeed: 50
     VisualState: 0
   - Id: LeftWaistGunner
@@ -3358,6 +3368,7 @@ MonoBehaviour:
     InjuryTimer: 0
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
+    HomeOffset: {x: 0, y: 0}
     MoveSpeed: 50
     VisualState: 0
   - Id: RightWaistGunner
@@ -3381,6 +3392,7 @@ MonoBehaviour:
     InjuryTimer: 0
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
+    HomeOffset: {x: 0, y: 0}
     MoveSpeed: 50
     VisualState: 0
   - Id: TailGunner
@@ -3404,6 +3416,7 @@ MonoBehaviour:
     InjuryTimer: 0
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
+    HomeOffset: {x: 0, y: 0}
     MoveSpeed: 50
     VisualState: 0
   verboseLogging: 1
@@ -3494,15 +3507,16 @@ MonoBehaviour:
   idleSprite: {fileID: 21300000, guid: 1d31511de87119b41956379106fadf12, type: 3}
   movingSprite: {fileID: 21300000, guid: 04dec49ef444b634f9378d177eb0e4d8, type: 3}
   workingSprite: {fileID: 21300000, guid: 14a9ec5a1932bc74a970548b7daa8305, type: 3}
-  incapacitatedSprite: {fileID: 0}
+  incapacitatedSprite: {fileID: 21300000, guid: 690c1b695eb5a3546ab74296578ef06e, type: 3}
   smoothing: 8
   baseColor: {r: 0.15948117, g: 0.45911938, b: 0.15159598, a: 1}
-  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 0.4}
-  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 0.35}
-  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 0.45}
-  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
+  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 1}
+  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 1}
+  seriousInjuryTint: {r: 1, g: 0.25, b: 0, a: 0.4}
+  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 1}
+  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 1}
   additiveTints: 1
-  dimWhenIncapacitated: 1
+  dimWhenIncapacitated: 0
   incapacitatedAlpha: 0.3
 --- !u!222 &449889749
 CanvasRenderer:
@@ -3596,15 +3610,16 @@ MonoBehaviour:
   idleSprite: {fileID: 21300000, guid: 2f195df5e2df70244817080dc73b66ac, type: 3}
   movingSprite: {fileID: 21300000, guid: 04dec49ef444b634f9378d177eb0e4d8, type: 3}
   workingSprite: {fileID: 21300000, guid: 14a9ec5a1932bc74a970548b7daa8305, type: 3}
-  incapacitatedSprite: {fileID: 0}
+  incapacitatedSprite: {fileID: 21300000, guid: 690c1b695eb5a3546ab74296578ef06e, type: 3}
   smoothing: 8
   baseColor: {r: 0.15948117, g: 0.45911938, b: 0.15159598, a: 1}
-  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 0.4}
-  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 0.35}
-  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 0.45}
-  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
+  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 1}
+  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 1}
+  seriousInjuryTint: {r: 1, g: 0.25, b: 0, a: 0.4}
+  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 1}
+  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 1}
   additiveTints: 1
-  dimWhenIncapacitated: 1
+  dimWhenIncapacitated: 0
   incapacitatedAlpha: 0.3
 --- !u!222 &455113684
 CanvasRenderer:
@@ -4510,15 +4525,16 @@ MonoBehaviour:
   idleSprite: {fileID: 21300000, guid: 74e5fec6aaff42d4aa0711a6eadb99d9, type: 3}
   movingSprite: {fileID: 21300000, guid: 04dec49ef444b634f9378d177eb0e4d8, type: 3}
   workingSprite: {fileID: 21300000, guid: 14a9ec5a1932bc74a970548b7daa8305, type: 3}
-  incapacitatedSprite: {fileID: 0}
+  incapacitatedSprite: {fileID: 21300000, guid: 690c1b695eb5a3546ab74296578ef06e, type: 3}
   smoothing: 8
   baseColor: {r: 0.15948117, g: 0.45911938, b: 0.15159598, a: 1}
-  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 0.4}
-  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 0.35}
-  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 0.45}
-  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
+  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 1}
+  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 1}
+  seriousInjuryTint: {r: 1, g: 0.25, b: 0, a: 0.4}
+  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 1}
+  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 1}
   additiveTints: 1
-  dimWhenIncapacitated: 1
+  dimWhenIncapacitated: 0
   incapacitatedAlpha: 0.3
 --- !u!222 &610252595
 CanvasRenderer:
@@ -5584,15 +5600,16 @@ MonoBehaviour:
   idleSprite: {fileID: 21300000, guid: 88c07b11754fe3541a5a18ae1cdf3339, type: 3}
   movingSprite: {fileID: 21300000, guid: 04dec49ef444b634f9378d177eb0e4d8, type: 3}
   workingSprite: {fileID: 21300000, guid: 14a9ec5a1932bc74a970548b7daa8305, type: 3}
-  incapacitatedSprite: {fileID: 0}
+  incapacitatedSprite: {fileID: 21300000, guid: 690c1b695eb5a3546ab74296578ef06e, type: 3}
   smoothing: 8
   baseColor: {r: 0.15948117, g: 0.45911938, b: 0.15159598, a: 1}
-  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 0.4}
-  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 0.35}
-  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 0.45}
-  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
+  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 1}
+  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 1}
+  seriousInjuryTint: {r: 1, g: 0.25, b: 0, a: 0.4}
+  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 1}
+  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 1}
   additiveTints: 1
-  dimWhenIncapacitated: 1
+  dimWhenIncapacitated: 0
   incapacitatedAlpha: 0.3
 --- !u!222 &712825029
 CanvasRenderer:
@@ -7991,15 +8008,16 @@ MonoBehaviour:
   idleSprite: {fileID: 21300000, guid: 4e3bded091063e247ab6579f1fba66d4, type: 3}
   movingSprite: {fileID: 21300000, guid: 04dec49ef444b634f9378d177eb0e4d8, type: 3}
   workingSprite: {fileID: 21300000, guid: 14a9ec5a1932bc74a970548b7daa8305, type: 3}
-  incapacitatedSprite: {fileID: 0}
+  incapacitatedSprite: {fileID: 21300000, guid: 690c1b695eb5a3546ab74296578ef06e, type: 3}
   smoothing: 8
   baseColor: {r: 0.15948117, g: 0.45911938, b: 0.15159598, a: 1}
-  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 0.4}
-  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 0.35}
-  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 0.45}
-  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
+  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 1}
+  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 1}
+  seriousInjuryTint: {r: 1, g: 0.25, b: 0, a: 0.4}
+  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 1}
+  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 1}
   additiveTints: 1
-  dimWhenIncapacitated: 1
+  dimWhenIncapacitated: 0
   incapacitatedAlpha: 0.3
 --- !u!222 &1139795024
 CanvasRenderer:
@@ -8920,15 +8938,16 @@ MonoBehaviour:
   idleSprite: {fileID: 21300000, guid: 00a2566c64e2d85478ac4efda639d7c1, type: 3}
   movingSprite: {fileID: 21300000, guid: 04dec49ef444b634f9378d177eb0e4d8, type: 3}
   workingSprite: {fileID: 21300000, guid: 14a9ec5a1932bc74a970548b7daa8305, type: 3}
-  incapacitatedSprite: {fileID: 0}
+  incapacitatedSprite: {fileID: 21300000, guid: 690c1b695eb5a3546ab74296578ef06e, type: 3}
   smoothing: 8
   baseColor: {r: 0.15948117, g: 0.45911938, b: 0.15159598, a: 1}
-  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 0.4}
-  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 0.35}
-  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 0.45}
-  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
+  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 1}
+  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 1}
+  seriousInjuryTint: {r: 1, g: 0.25, b: 0, a: 0.4}
+  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 1}
+  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 1}
   additiveTints: 1
-  dimWhenIncapacitated: 1
+  dimWhenIncapacitated: 0
   incapacitatedAlpha: 0.3
 --- !u!222 &1307355848
 CanvasRenderer:
@@ -13835,11 +13854,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 03476c79d3d72614da604eeeb4303add, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enableChaos: 0
+  enableChaos: 1
   chaosInterval: 0.1
-  damageEventChance: 0.7
+  damageEventChance: 0.8
   fireEventChance: 0.1
-  crewInjuryChance: 0.2
+  crewInjuryChance: 0.1
   minDamage: 5
   maxDamage: 25
   lightInjuryChance: 0.6
@@ -14331,15 +14350,16 @@ MonoBehaviour:
   idleSprite: {fileID: 21300000, guid: 6cce3a9430ac60c4790cba167daff3f2, type: 3}
   movingSprite: {fileID: 21300000, guid: 04dec49ef444b634f9378d177eb0e4d8, type: 3}
   workingSprite: {fileID: 21300000, guid: 14a9ec5a1932bc74a970548b7daa8305, type: 3}
-  incapacitatedSprite: {fileID: 0}
+  incapacitatedSprite: {fileID: 21300000, guid: 690c1b695eb5a3546ab74296578ef06e, type: 3}
   smoothing: 8
   baseColor: {r: 0.15948117, g: 0.45911938, b: 0.15159598, a: 1}
-  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 0.4}
-  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 0.35}
-  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 0.45}
-  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
+  workingTint: {r: 0.4847711, g: 0.53317255, b: 0.7987421, a: 1}
+  lightInjuryTint: {r: 1, g: 0.8830018, b: 0, a: 1}
+  seriousInjuryTint: {r: 1, g: 0.25, b: 0, a: 0.4}
+  criticalInjuryTint: {r: 1, g: 0, b: 0, a: 1}
+  deadTint: {r: 0.3, g: 0.3, b: 0.3, a: 1}
   additiveTints: 1
-  dimWhenIncapacitated: 1
+  dimWhenIncapacitated: 0
   incapacitatedAlpha: 0.3
 --- !u!222 &2106300476
 CanvasRenderer:

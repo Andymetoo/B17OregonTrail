@@ -17,6 +17,7 @@ public class CrewMember {
     // --- VISUAL & MOVEMENT ---
     public Vector2 HomePosition;      // Where this crew's station is located on screen
     public Vector2 CurrentPosition;   // Current screen position (for movement lerp)
+    public Vector2 HomeOffset;        // Optional per-crew offset added to station position
     public float MoveSpeed = 50f;     // Pixels per second movement speed
     public CrewVisualState VisualState = CrewVisualState.IdleAtStation;
 }

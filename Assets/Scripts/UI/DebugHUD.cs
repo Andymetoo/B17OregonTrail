@@ -159,7 +159,7 @@ public class DebugHUD : MonoBehaviour
         crewStatusText.text = $"Status: {crew.Status}";
         crewStationText.text = $"Station: {crew.CurrentStationId}";
 
-        if (crew.CurrentAction != null)
+        if (crew.CurrentAction != null && crew.CurrentAction.Type != ActionType.Idle)
         {
             float pct = crew.CurrentAction.Duration > 0f
                 ? Mathf.Clamp01(crew.CurrentAction.Elapsed / crew.CurrentAction.Duration) * 100f

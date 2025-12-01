@@ -76,7 +76,8 @@ public class CrewManager : MonoBehaviour
             string stationId = !string.IsNullOrEmpty(crew.CurrentStationId) ? crew.CurrentStationId : crew.Id;
             var rect = CrewPositionRegistry.Instance.GetStationRect(stationId);
             // Always resolve via registry to ensure referenceParent-space conversion
-            Vector2 homePos = CrewPositionRegistry.Instance.GetStationPosition(stationId);
+            Vector2 baseHomePos = CrewPositionRegistry.Instance.GetStationPosition(stationId);
+            Vector2 homePos = baseHomePos + crew.HomeOffset;
 
             crew.HomePosition = homePos;
             crew.CurrentPosition = homePos;
@@ -89,7 +90,7 @@ public class CrewManager : MonoBehaviour
             if (ShouldTrace(crew))
             {
                 string rectInfo = rect == null ? "<null>" : $"{BuildPath(rect)} rectAnchored={rect.anchoredPosition}";
-                Debug.Log($"[Trace] StartPosition crew={crew.Id} stationId={stationId} rect={rectInfo} resolvedHome(refParent)={homePos}");
+                Debug.Log($"[Trace] StartPosition crew={crew.Id} stationId={stationId} rect={rectInfo} baseHome(refParent)={baseHomePos} offset={crew.HomeOffset} finalHome={homePos}");
             }
         }
         if (missingStations.Count > 0)
@@ -614,6 +615,22 @@ public class CrewManager : MonoBehaviour
         
         // Basic validation examples:
         if (crew.Status == CrewStatus.Dead) return false;
+        // Treat explicit Idle assignment as a request to clear any action
+        if (action != null && action.Type == ActionType.Idle)
+        {
+            // If there was an action, cancel back to home
+            if (crew.CurrentAction != null)
+            {
+                CancelCurrentAction(crew, "Idle assigned");
+            }
+            else
+            {
+                crew.CurrentAction = null;
+                crew.VisualState = CrewVisualState.IdleAtStation;
+                crew.CurrentPosition = crew.HomePosition;
+            }
+            return true;
+        }
         // Only healthy crew can be assigned actions
         if (crew.Status != CrewStatus.Healthy)
         {
@@ -632,8 +649,16 @@ public class CrewManager : MonoBehaviour
             switch (action.Type)
             {
                 case ActionType.TreatInjury:
+                {
+                    var target = GetCrewById(action.TargetId);
+                    if (target == null || target.Status == CrewStatus.Healthy)
+                    {
+                        if (verboseLogging && ShouldTrace(crew)) Debug.Log($"[Trace] Reject assign TreatInjury: target invalid or healthy targetId={action.TargetId}");
+                        return false;
+                    }
                     if (_treatingCrewTargets.Contains(action.TargetId)) return false;
                     break;
+                }
                 case ActionType.ExtinguishFire:
                     if (_extinguishSectionTargets.Contains(action.TargetId)) return false;
                     break;

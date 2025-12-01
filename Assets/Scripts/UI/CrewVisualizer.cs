@@ -23,6 +23,7 @@ public class CrewVisualizer : MonoBehaviour
     [SerializeField] private Color baseColor = Color.white;
     [SerializeField] private Color workingTint = new Color(1f, 0.9f, 0.2f, 0.4f); // subtle warm tint
     [SerializeField] private Color lightInjuryTint = new Color(1f, 0.5f, 0f, 0.35f); // orange
+    [SerializeField] private Color seriousInjuryTint = new Color(1f, 0.25f, 0f, 0.4f); // deeper orange
     [SerializeField] private Color criticalInjuryTint = new Color(1f, 0f, 0f, 0.45f); // red
     [SerializeField] private Color deadTint = new Color(0.3f, 0.3f, 0.3f, 0.5f); // gray
     [SerializeField] private bool additiveTints = true; // additive vs multiply
@@ -94,7 +95,8 @@ public class CrewVisualizer : MonoBehaviour
     {
         if (crew == null || image == null) return;
 
-        bool incapacitated = crew.Status == CrewStatus.Unconscious || crew.Status == CrewStatus.Dead;
+        // Treat any non-healthy status as incapacitated for visuals
+        bool incapacitated = crew.Status != CrewStatus.Healthy;
 
         // Choose sprite
         Sprite newSprite;
@@ -127,13 +129,14 @@ public class CrewVisualizer : MonoBehaviour
             case CrewStatus.Light:
                 c = Blend(c, lightInjuryTint, additiveTints);
                 break;
+            case CrewStatus.Serious:
+                c = Blend(c, seriousInjuryTint, additiveTints);
+                break;
             case CrewStatus.Critical:
                 c = Blend(c, criticalInjuryTint, additiveTints);
                 break;
-            case CrewStatus.Dead:
-                c = Blend(c, deadTint, additiveTints);
-                break;
             case CrewStatus.Unconscious:
+            case CrewStatus.Dead:
                 c = Blend(c, deadTint, additiveTints);
                 break;
         }

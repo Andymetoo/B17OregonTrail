@@ -174,6 +174,15 @@ public class OrdersUIController : MonoBehaviour
             return;
         }
 
+        // Medical must target a crew, not a section/station
+        if (pendingOrder == PendingOrderType.TreatInjury)
+        {
+            OnPendingActionMessage?.Invoke("Select an injured crew member to treat.");
+            EventLogUI.Instance?.Log("Medical requires clicking an injured crew, not a section.", Color.red);
+            Debug.Log("[OrdersUI] Ignoring non-crew target for medical.");
+            return;
+        }
+
         if (string.IsNullOrEmpty(selectedCrewId))
         {
             Debug.Log("[OrdersUI] No crew selected when target clicked.");
@@ -299,8 +308,24 @@ public class OrdersUIController : MonoBehaviour
                 break;
 
             case PendingOrderType.TreatInjury:
+            {
+                // Validate target is a crew and is injured
+                var target = CrewManager.Instance?.GetCrewById(pendingTargetId);
+                if (target == null)
+                {
+                    EventLogUI.Instance?.Log("Select an injured crew to treat (not a section).", Color.red);
+                    OnPendingActionMessage?.Invoke("Select an injured crew member.");
+                    return;
+                }
+                if (target.Status == CrewStatus.Healthy)
+                {
+                    EventLogUI.Instance?.Log($"{target.Name} is not injured.", Color.red);
+                    OnPendingActionMessage?.Invoke($"{target.Name} is not injured.");
+                    return;
+                }
                 cmd = new TreatInjuryCommand(selectedCrewId, pendingTargetId, 10f);
                 break;
+            }
         }
 
         if (cmd != null)
