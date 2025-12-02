@@ -63,14 +63,14 @@ public class SimulationTicker : MonoBehaviour
     public void Pause()
     {
         isPaused = true;
-        Debug.Log("[Simulation] Paused");
+        Debug.Log($"[SimulationTicker] Pause() called - isPaused now = {isPaused} | StackTrace: {System.Environment.StackTrace}");
     }
     
     public void Resume()
     {
         isPaused = false;
         lastTickTime = Time.time; // Reset to avoid time jump
-        Debug.Log("[Simulation] Resumed");
+        Debug.Log($"[SimulationTicker] Resume() called - isPaused now = {isPaused} | StackTrace: {System.Environment.StackTrace}");
     }
     
     public void SetTimeScale(float scale)

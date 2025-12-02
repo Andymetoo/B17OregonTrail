@@ -74,7 +74,7 @@ public class EventTriggerManager : MonoBehaviour
     {
         if (evt == null) return;
         EventLogUI.Instance?.Log(evt.Title, evt.DisplayColor);
-        EventPopupUI.Instance?.Show(evt, pause:false);
+        EventPopupUI.Instance?.Show(evt, pause:true);  // Changed to pause:true for Oregon Trail style
     }
 
     [ContextMenu("Force Random Flavor Event")]
