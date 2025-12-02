@@ -16,6 +16,7 @@ public class EventPopupUI : MonoBehaviour
     [SerializeField] private Button continueButton;
 
     private bool wasPausedByPopup = false;
+    private GamePhase? phaseBeforePause;
     private System.Action onContinue;
 
     private void Awake()
@@ -111,6 +112,7 @@ public class EventPopupUI : MonoBehaviour
         if (pause)
         {
             wasPausedByPopup = false; // Reset flag
+            phaseBeforePause = null;
 
             // Pause SimulationTicker AGGRESSIVELY
             if (SimulationTicker.Instance != null)
@@ -134,6 +136,7 @@ public class EventPopupUI : MonoBehaviour
             {
                 if (!GameStateManager.Instance.IsPaused)
                 {
+                    phaseBeforePause = GameStateManager.Instance.CurrentPhase;
                     GameStateManager.Instance.PauseGame();
                     Debug.Log("[EventPopupUI] Paused GameStateManager");
                 }
@@ -165,11 +168,13 @@ public class EventPopupUI : MonoBehaviour
             // Resume GameStateManager
             if (GameStateManager.Instance != null)
             {
-                GameStateManager.Instance.ResumeGame(GamePhase.Cruise);
+                var resumePhase = phaseBeforePause ?? GamePhase.Cruise;
+                GameStateManager.Instance.ResumeGame(resumePhase);
                 Debug.Log("[EventPopupUI] Resumed GameStateManager");
             }
 
             wasPausedByPopup = false;
+            phaseBeforePause = null;
         }
     }
 
@@ -177,6 +182,7 @@ public class EventPopupUI : MonoBehaviour
     {
         if (panel != null) panel.SetActive(false);
         wasPausedByPopup = false;
+        phaseBeforePause = null;
     }
 
     // Overload for future GameEvent usage

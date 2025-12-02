@@ -62,6 +62,10 @@ public class ChaosSimulator : MonoBehaviour
     private HazardPhase _currentPhase = HazardPhase.Cruise;
     private float _phaseTimer;
     private float _phaseDuration;
+    private bool _legConfigured;
+
+    // Warnings/guardrails
+    private bool _warnedTickWithoutLeg;
 
     // Leg-configured values
     private float _legStartDanger = 0f;
@@ -100,6 +104,14 @@ public class ChaosSimulator : MonoBehaviour
         // Update leg-driven danger if travelling
         if (MissionManager.Instance != null && MissionManager.Instance.IsTravelling)
         {
+            if (!_legConfigured || _phaseDuration <= 0f)
+            {
+                // Auto-bootstrap a leg if config was missed to avoid disabling hazards entirely
+                // Use existing stored values or safe defaults
+                Debug.LogWarning("[Chaos] Auto-configuring leg due to missing ConfigureLeg; applying grace period and stored/default values.");
+                ConfigureLeg(_legStartDanger, _legEndDanger, _legPhaseWeights);
+            }
+
             var t = MissionManager.Instance.SegmentProgress01;
             float danger = Mathf.Lerp(_legStartDanger, _legEndDanger, t);
             CurrentDanger = danger; // Store for external monitoring
@@ -173,6 +185,8 @@ public class ChaosSimulator : MonoBehaviour
         _currentPhase = HazardPhase.Cruise;
         _phaseTimer = 0f;
         _phaseDuration = Random.Range(3f, 5f); // Initial grace period
+        _legConfigured = true;
+        _warnedTickWithoutLeg = false;
         timeSinceLastHazard = 0f;
         timeSinceLastInjury = 0f;
         // Initialize randomized intervals

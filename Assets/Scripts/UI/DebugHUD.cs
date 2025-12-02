@@ -67,7 +67,11 @@ public class DebugHUD : MonoBehaviour
     {
         if (GameStateManager.Instance != null)
         {
-            phaseText.text = $"Phase: {GameStateManager.Instance.CurrentPhase}";
+            // Show ChaosSimulator hazard phase instead of GameStateManager game phase for better visibility
+            string phaseDisplay = ChaosSimulator.Instance != null 
+                ? $"Hazard: {ChaosSimulator.Instance.CurrentPhase} ({ChaosSimulator.Instance.PhaseTimeRemaining:F1}s) | Danger: {ChaosSimulator.Instance.CurrentDanger:F2}"
+                : $"Game: {GameStateManager.Instance.CurrentPhase}";
+            phaseText.text = phaseDisplay;
             timeText.text = $"Time: {GameStateManager.Instance.SimulationTime:F1}s";
         }
 
