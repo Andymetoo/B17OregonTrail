@@ -31,6 +31,7 @@ RectTransform:
   m_Children:
   - {fileID: 1879519025577087690}
   - {fileID: 1315900254630012388}
+  - {fileID: 2592174258868375106}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -54,12 +55,18 @@ MonoBehaviour:
   crewButton: {fileID: 0}
   statusIndicator: {fileID: 3440257522849436075}
   borderImage: {fileID: 7161227746158665237}
+  stationIcon: {fileID: 6242527199570730273}
   injurySprite: {fileID: 21300000, guid: 3dc2f9f2eec29e14fbfa10c723a46fbe, type: 3}
   deadSprite: {fileID: 21300000, guid: 49ac181438c02654caf49496078d7087, type: 3}
   repairSprite: {fileID: 21300000, guid: 378ec8ce324ebea439269c4132aebd0c, type: 3}
   medicalSprite: {fileID: 21300000, guid: 3692dfffeb0a5f0488a900329f0cbf88, type: 3}
   fireSprite: {fileID: 21300000, guid: 4eb217c3721f7b64eb82b3ce07f7d51e, type: 3}
   moveSprite: {fileID: 21300000, guid: 5de2c69b4d2df9d49bd305f8e656dd9a, type: 3}
+  pilotIcon: {fileID: 21300000, guid: b4eeb1726217e1e43988422b1448d771, type: 3}
+  gunIcon: {fileID: 21300000, guid: c69343aac78c03b43ba7da9df7ba7103, type: 3}
+  navigatorIcon: {fileID: 21300000, guid: c8798086f1e944143bc5e864e0705c60, type: 3}
+  bombardierIcon: {fileID: 21300000, guid: 51bced2484ff15a4db6ecd8a1bca90ef, type: 3}
+  radioIcon: {fileID: 21300000, guid: ea4fbebca54a4564795904db03067ecb, type: 3}
   incapacitatedAlpha: 0.5
   healthyColor: {r: 0, g: 1, b: 0, a: 1}
   lightInjuryColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
@@ -193,6 +200,81 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2814023138090319183}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!1 &9002696184597603659
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2592174258868375106}
+  - component: {fileID: 6579162131356666118}
+  - component: {fileID: 6242527199570730273}
+  m_Layer: 5
+  m_Name: StationIndicator
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &2592174258868375106
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9002696184597603659}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7366568765713371302}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: -75, y: -28.4}
+  m_SizeDelta: {x: 8, y: 8}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!222 &6579162131356666118
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9002696184597603659}
+  m_CullTransparentMesh: 1
+--- !u!114 &6242527199570730273
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9002696184597603659}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}

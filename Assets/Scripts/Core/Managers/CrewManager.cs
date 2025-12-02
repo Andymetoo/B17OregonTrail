@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class CrewManager : MonoBehaviour
@@ -251,6 +252,18 @@ public class CrewManager : MonoBehaviour
                 
                 if (Vector2.Distance(crew.CurrentPosition, action.TargetPosition) < 1f)
                 {
+                    // Move action: complete immediately on arrival, no "Performing" phase
+                    if (action.Type == ActionType.Move)
+                    {
+                        ExecuteActionEffect(crew);
+                        crew.HomePosition = action.TargetPosition;
+                        crew.CurrentPosition = action.TargetPosition;
+                        CompleteAction(crew);
+                        if (verboseLogging && ShouldTrace(crew))
+                            Debug.Log($"[Trace] Move complete on arrival: crew={crew.Id} newHome={crew.HomePosition}");
+                        return;
+                    }
+                    
                     action.Phase = ActionPhase.Performing;
                     action.Elapsed = 0f;
                     crew.VisualState = CrewVisualState.Working;
@@ -266,12 +279,25 @@ public class CrewManager : MonoBehaviour
                 if (action.IsComplete)
                 {
                     ExecuteActionEffect(crew);
+                    
+                    // OccupyStation action: complete immediately, no return phase
+                    if (action.Type == ActionType.OccupyStation)
+                    {
+                        // Update HomePosition to new station position permanently
+                        crew.HomePosition = action.TargetPosition;
+                        crew.CurrentPosition = action.TargetPosition;
+                        CompleteAction(crew);
+                        if (verboseLogging && ShouldTrace(crew))
+                            Debug.Log($"[Trace] OccupyStation complete: crew={crew.Id} newStation={crew.CurrentStation} newHome={crew.HomePosition}");
+                        return;
+                    }
+                    
                     action.Phase = ActionPhase.Returning;
                     action.Elapsed = 0f;
                     crew.VisualState = CrewVisualState.Moving;
 
                     // Build return path along ordered sections for section-based actions
-                    if ((action.Type == ActionType.Repair || action.Type == ActionType.ExtinguishFire || action.Type == ActionType.TreatInjury || action.Type == ActionType.OccupyStation) && CrewPositionRegistry.Instance != null)
+                    if ((action.Type == ActionType.Repair || action.Type == ActionType.ExtinguishFire || action.Type == ActionType.TreatInjury) && CrewPositionRegistry.Instance != null)
                     {
                         var reg = CrewPositionRegistry.Instance;
                         string fromSection = !string.IsNullOrEmpty(action.TargetSectionId)
@@ -354,6 +380,32 @@ public class CrewManager : MonoBehaviour
 
         var action = crew.CurrentAction;
 
+        // Attempt to restore previous station if crew temporarily vacated it
+        if (StationManager.Instance != null && action.PreviousStation != StationType.None)
+        {
+            // Try to re-occupy the original station
+            bool restored = StationManager.Instance.AssignCrewToStation(crew.Id, action.PreviousStation);
+            if (restored)
+            {
+                Debug.Log($"[CrewManager] Crew {crew.Id} restored to station {action.PreviousStation} after completing {action.Type}");
+                // Update home position to the station's position
+                if (CrewPositionRegistry.Instance != null)
+                {
+                    var station = StationManager.Instance.GetStation(action.PreviousStation);
+                    if (station != null)
+                    {
+                        crew.HomePosition = CrewPositionRegistry.Instance.GetStationPosition(station.StationId);
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[CrewManager] Could not restore crew {crew.Id} to station {action.PreviousStation} - station occupied or unavailable");
+                // Station was taken - crew stays at current position as new home
+                crew.HomePosition = crew.CurrentPosition;
+            }
+        }
+
         // Fire completion event while action info is still available to listeners
         OnCrewActionCompleted?.Invoke(crew);
         
@@ -377,7 +429,15 @@ public class CrewManager : MonoBehaviour
     {
         var action = crew.CurrentAction;
         
-        // Roll for success
+        // Move and ManStation don't have success/failure - they always succeed
+        if (action.Type == ActionType.Move || action.Type == ActionType.ManStation)
+        {
+            action.RolledSuccess = true;
+            ApplyActionEffect(crew, action);
+            return;
+        }
+        
+        // Roll for success for other actions
         float roll = UnityEngine.Random.value;
         bool success = roll <= action.SuccessChance;
         action.RolledSuccess = success;
@@ -414,11 +474,50 @@ public class CrewManager : MonoBehaviour
             }
         }
         
-        // Apply the effect
+        ApplyActionEffect(crew, action);
+    }
+    
+    /// <summary>
+    /// Apply the actual effect of a successful action.
+    /// </summary>
+    private void ApplyActionEffect(CrewMember crew, CrewAction action)
+    {
         switch (action.Type)
         {
             case ActionType.Move:
                 crew.CurrentStationId = action.TargetId;
+                
+                // Auto-occupy station if moving to an available station position
+                if (StationManager.Instance != null && CrewPositionRegistry.Instance != null)
+                {
+                    // Check if target position matches any station position
+                    var allStations = StationManager.Instance.AllStations;
+                    if (allStations != null)
+                    {
+                        // Find all stations at or near this position
+                        var stationsAtPosition = allStations
+                            .Where(s => {
+                                var stationPos = CrewPositionRegistry.Instance.GetStationPosition(s.StationId);
+                                return Vector2.Distance(stationPos, action.TargetPosition) < 5f; // Within 5 pixels
+                            })
+                            .OrderBy(s => GetStationPriority(s.Type)) // Pilot > CoPilot > others
+                            .ToList();
+                        
+                        // Try to occupy first available station at this position
+                        foreach (var station in stationsAtPosition)
+                        {
+                            if (station.IsAvailable)
+                            {
+                                bool assigned = StationManager.Instance.AssignCrewToStation(crew.Id, station);
+                                if (assigned)
+                                {
+                                    Debug.Log($"[CrewManager] {crew.Name} auto-occupied {station.Type} when moving to position");
+                                    break; // Only occupy one station
+                                }
+                            }
+                        }
+                    }
+                }
                 break;
 
             case ActionType.ExtinguishFire:
@@ -537,6 +636,25 @@ public class CrewManager : MonoBehaviour
         action.TargetPosition = GetTargetPositionForAction(action);
         action.Waypoints = null;
         action.CurrentWaypointIndex = 0;
+        
+        // Handle station vacation logic based on action type
+        if (StationManager.Instance != null && crew.CurrentStation != StationType.None)
+        {
+            if (action.Type == ActionType.Move)
+            {
+                // Move action: permanently vacate station
+                StationManager.Instance.VacateStation(crew.CurrentStation, crew.Id);
+                action.PreviousStation = StationType.None; // Don't restore station on return
+                Debug.Log($"[CrewManager] Crew {crew.Id} permanently vacating station {crew.CurrentStation} for Move action");
+            }
+            else if (action.Type != ActionType.OccupyStation && action.Type != ActionType.ManStation && action.Type != ActionType.Idle)
+            {
+                // Other actions (Repair, Medical, Fire): temporarily vacate station
+                action.PreviousStation = crew.CurrentStation;
+                StationManager.Instance.VacateStation(crew.CurrentStation, crew.Id);
+                Debug.Log($"[CrewManager] Crew {crew.Id} temporarily vacating station {crew.CurrentStation} for {action.Type} action");
+            }
+        }
         
         // For section-based actions, build waypoint path following ordered sections
         if (action.Type == ActionType.Repair || action.Type == ActionType.ExtinguishFire)
@@ -969,6 +1087,20 @@ public class CrewManager : MonoBehaviour
         
         OnCrewInjuryStageChanged?.Invoke(crew);
         return true;
+    }
+
+    /// <summary>
+    /// Get station priority for auto-occupation (lower = higher priority).
+    /// Pilot > CoPilot > all other stations.
+    /// </summary>
+    private int GetStationPriority(StationType type)
+    {
+        return type switch
+        {
+            StationType.Pilot => 1,
+            StationType.CoPilot => 2,
+            _ => 3
+        };
     }
 
 }

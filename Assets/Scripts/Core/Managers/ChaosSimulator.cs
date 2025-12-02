@@ -172,18 +172,21 @@ public class ChaosSimulator : MonoBehaviour
                 }
             }
 
-            // Crew injuries can occur across any phase; frequency scales with danger
-            timeSinceLastInjury += deltaTime;
-            // Initialize next interval if needed
-            if (_nextInjuryInterval <= 0f)
+            // Crew injuries ONLY occur during hazard phases (Flak/Fighters), not during Cruise
+            if (IsInHazardPhase)
             {
-                _nextInjuryInterval = SampleInterval(injuryIntervalMean, injuryIntervalJitter, useExponentialTiming);
-            }
-            if (timeSinceLastInjury >= _nextInjuryInterval)
-            {
-                timeSinceLastInjury = 0f;
-                _nextInjuryInterval = SampleInterval(injuryIntervalMean, injuryIntervalJitter, useExponentialTiming);
-                if (Random.value < CurrentCrewInjuryWeight(danger)) GenerateCrewInjuryEvent(danger);
+                timeSinceLastInjury += deltaTime;
+                // Initialize next interval if needed
+                if (_nextInjuryInterval <= 0f)
+                {
+                    _nextInjuryInterval = SampleInterval(injuryIntervalMean, injuryIntervalJitter, useExponentialTiming);
+                }
+                if (timeSinceLastInjury >= _nextInjuryInterval)
+                {
+                    timeSinceLastInjury = 0f;
+                    _nextInjuryInterval = SampleInterval(injuryIntervalMean, injuryIntervalJitter, useExponentialTiming);
+                    if (Random.value < CurrentCrewInjuryWeight(danger)) GenerateCrewInjuryEvent(danger);
+                }
             }
         }
     }
@@ -288,16 +291,10 @@ public class ChaosSimulator : MonoBehaviour
         float fireChance = Mathf.Lerp(0.05f, 0.6f, fireWeight);
         PlaneManager.Instance.ApplyHitToSection(section.Id, damage, true, fireChance);
         
-        // Direct damage notification - no flavor text during combat
+        // Destruction notification only - regular damage goes through DamageLogUI
         if (section.Integrity <= 0 && oldIntegrity > 0)
         {
             EventPopupUI.Instance?.Show($"{section.Id} destroyed!", Color.red, pause:false);
-        }
-        else if (damage > 0)
-        {
-            string msg = $"{section.Id} hit! {damage} damage (Integrity: {section.Integrity})";
-            if (section.OnFire && !wasOnFire) msg += " - FIRE!";
-            EventPopupUI.Instance?.Show(msg, Color.red, pause:false);
         }
         
         OnChaosEvent?.Invoke($"Flak hit {section.Id}");
@@ -332,14 +329,6 @@ public class ChaosSimulator : MonoBehaviour
             if (!hitSections.Contains(section.Id)) hitSections.Add(section.Id);
             totalDamage += damage;
             if (section.OnFire && !wasOnFire) anyFires = true;
-        }
-        
-        // Direct damage notification - no flavor text during combat
-        if (totalDamage > 0)
-        {
-            string msg = $"Fighter pass! Hit: {string.Join(", ", hitSections)} ({totalDamage} damage)";
-            if (anyFires) msg += " - FIRE!";
-            EventPopupUI.Instance?.Show(msg, Color.red, pause:false);
         }
         
         OnChaosEvent?.Invoke($"Fighter strafe {passes} passes");

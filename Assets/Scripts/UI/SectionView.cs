@@ -19,6 +19,12 @@ public class SectionView : MonoBehaviour
     public int maxIntegrity = 100;
     [Tooltip("Section integrity when destroyed (usually 0)")]
     public int minIntegrity = 0;
+    
+    [Header("Damage Blink Effect")]
+    public float blinkDuration = 0.5f; // How long to blink when hit
+    public Color blinkColor = Color.white; // Flash color
+    private float blinkTimer = 0f;
+    private int lastKnownIntegrity = -1;
 
     void Update()
     {
@@ -26,15 +32,35 @@ public class SectionView : MonoBehaviour
 
         var section = PlaneManager.Instance.GetSection(sectionId);
         if (section == null) return;
+        
+        // Detect damage (integrity decreased)
+        if (lastKnownIntegrity > 0 && section.Integrity < lastKnownIntegrity)
+        {
+            blinkTimer = blinkDuration; // Start blink
+        }
+        lastKnownIntegrity = section.Integrity;
+        
+        // Update blink timer
+        if (blinkTimer > 0f)
+        {
+            blinkTimer -= Time.deltaTime;
+        }
 
-        // Priority: Fire overrides everything, then gradient damage tint
-        if (section.OnFire)
+        // Priority: Blink > Fire > Gradient damage tint
+        if (blinkTimer > 0f)
+        {
+            // Flash white when damaged
+            image.color = blinkColor;
+        }
+        else if (section.OnFire)
         {
             image.color = fireColor;
         }
         else
         {
-            // Gradient from healthy (green) at max integrity to critical (red) at min integrity
+            // Gradient from critical (red) at 0 to healthy (green) at max
+            // integrityFraction = 0.0 when integrity is 0 (critical)
+            // integrityFraction = 1.0 when integrity is 100 (healthy)
             float integrityFraction = Mathf.InverseLerp(minIntegrity, maxIntegrity, section.Integrity);
             image.color = Color.Lerp(criticalColor, healthyColor, integrityFraction);
         }

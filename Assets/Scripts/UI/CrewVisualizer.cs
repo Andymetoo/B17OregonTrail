@@ -11,10 +11,30 @@ public class CrewVisualizer : MonoBehaviour
     [SerializeField] private string crewId;
     
     [Header("Sprite States")]
-    [SerializeField] private Sprite idleSprite;
+    [SerializeField] private Sprite idleSprite; // Default idle (no station)
     [SerializeField] private Sprite movingSprite;
     [SerializeField] private Sprite workingSprite;
     [SerializeField] private Sprite incapacitatedSprite; // used for Unconscious/Dead
+    
+    [Header("Station-Specific Idle Sprites (B-17F)")]
+    [SerializeField] private Sprite pilotIdleSprite;
+    [SerializeField] private Sprite copilotIdleSprite;
+    [SerializeField] private Sprite navigatorIdleSprite;
+    [SerializeField] private Sprite bombardierIdleSprite;
+    [SerializeField] private Sprite radioOperatorIdleSprite;
+    [SerializeField] private Sprite topTurretIdleSprite;
+    [SerializeField] private Sprite ballTurretIdleSprite;
+    [SerializeField] private Sprite leftWaistGunIdleSprite;
+    [SerializeField] private Sprite rightWaistGunIdleSprite;
+    [SerializeField] private Sprite tailGunIdleSprite;
+    
+    [Header("Action Progress Display")]
+    [SerializeField] private GameObject actionProgressUI; // Container for progress bar + icon (above crew head)
+    [SerializeField] private Image progressFill; // Progress bar fill
+    [SerializeField] private Image actionIcon; // Icon showing what action (repair/medical/fire)
+    [SerializeField] private Sprite repairIconSprite;
+    [SerializeField] private Sprite medicalIconSprite;
+    [SerializeField] private Sprite fireIconSprite;
     
     [Header("Movement")]
     [SerializeField] private float smoothing = 8f;
@@ -89,31 +109,48 @@ public class CrewVisualizer : MonoBehaviour
         }
 
         UpdateSprite();
+        UpdateActionProgress();
     }
     
     private void UpdateSprite()
     {
         if (crew == null || image == null) return;
 
-        // Treat any non-healthy status as incapacitated for visuals
-        bool incapacitated = crew.Status != CrewStatus.Healthy;
+        // Determine if incapacitated (can't perform actions and should show collapsed sprite)
+        // Serious/Critical/Unconscious/Dead = incapacitated sprite
+        // Light = injured but mobile (use normal sprites with tint)
+        bool showIncapacitatedSprite = crew.Status == CrewStatus.Serious ||
+                                       crew.Status == CrewStatus.Critical || 
+                                       crew.Status == CrewStatus.Unconscious || 
+                                       crew.Status == CrewStatus.Dead;
 
-        // Choose sprite
-        Sprite newSprite;
-        if (incapacitated && incapacitatedSprite != null)
+        // Choose sprite with priority: Incapacitated > Moving > Working > Station Idle > Default Idle
+        Sprite newSprite = null;
+        
+        if (showIncapacitatedSprite && incapacitatedSprite != null)
         {
             newSprite = incapacitatedSprite;
         }
-        else
+        else if (crew.VisualState == CrewVisualState.Moving && movingSprite != null)
         {
-            newSprite = crew.VisualState switch
-            {
-                CrewVisualState.IdleAtStation => idleSprite,
-                CrewVisualState.Moving => movingSprite,
-                CrewVisualState.Working => workingSprite,
-                _ => idleSprite
-            };
+            newSprite = movingSprite;
         }
+        else if (crew.VisualState == CrewVisualState.Working && workingSprite != null)
+        {
+            newSprite = workingSprite;
+        }
+        else if (crew.VisualState == CrewVisualState.IdleAtStation && crew.CurrentStation != StationType.None)
+        {
+            // Use station-specific idle sprite
+            newSprite = GetStationIdleSprite(crew.CurrentStation);
+        }
+        
+        // Fallback to default idle if no specific sprite found
+        if (newSprite == null)
+        {
+            newSprite = idleSprite;
+        }
+        
         if (newSprite != null && image.sprite != newSprite)
         {
             image.sprite = newSprite;
@@ -141,11 +178,81 @@ public class CrewVisualizer : MonoBehaviour
                 break;
         }
 
-        if (incapacitated && dimWhenIncapacitated)
+        // Dim the sprite for incapacitated crew
+        if (showIncapacitatedSprite && dimWhenIncapacitated)
         {
             c.a = incapacitatedAlpha;
         }
         image.color = c;
+    }
+    
+    /// <summary>
+    /// Get station-specific idle sprite based on current station assignment.
+    /// </summary>
+    private Sprite GetStationIdleSprite(StationType station)
+    {
+        return station switch
+        {
+            StationType.Pilot => pilotIdleSprite,
+            StationType.CoPilot => copilotIdleSprite,
+            StationType.Navigator => navigatorIdleSprite,
+            StationType.Bombardier => bombardierIdleSprite,
+            StationType.RadioOperator => radioOperatorIdleSprite,
+            StationType.TopTurret => topTurretIdleSprite,
+            StationType.BallTurret => ballTurretIdleSprite,
+            StationType.LeftWaistGun => leftWaistGunIdleSprite,
+            StationType.RightWaistGun => rightWaistGunIdleSprite,
+            StationType.TailGun => tailGunIdleSprite,
+            _ => idleSprite // Fallback to default
+        };
+    }
+    
+    /// <summary>
+    /// Update the action progress bar and icon above the crew member's head.
+    /// </summary>
+    private void UpdateActionProgress()
+    {
+        if (actionProgressUI == null) return;
+        
+        // Show progress UI only when crew has an active action (not Idle, not Move)
+        bool hasAction = crew.CurrentAction != null && 
+                        crew.CurrentAction.Type != ActionType.Idle &&
+                        crew.CurrentAction.Type != ActionType.Move;
+        
+        actionProgressUI.SetActive(hasAction);
+        
+        if (!hasAction) return;
+        
+        // Update progress bar fill
+        if (progressFill != null)
+        {
+            float progress = crew.CurrentAction.Duration > 0f
+                ? crew.CurrentAction.Elapsed / crew.CurrentAction.Duration
+                : 0f;
+            progressFill.fillAmount = Mathf.Clamp01(progress);
+        }
+        
+        // Update action icon
+        if (actionIcon != null)
+        {
+            Sprite icon = crew.CurrentAction.Type switch
+            {
+                ActionType.Repair => repairIconSprite,
+                ActionType.TreatInjury => medicalIconSprite,
+                ActionType.ExtinguishFire => fireIconSprite,
+                _ => null
+            };
+            
+            if (icon != null)
+            {
+                actionIcon.enabled = true;
+                actionIcon.sprite = icon;
+            }
+            else
+            {
+                actionIcon.enabled = false;
+            }
+        }
     }
 
     private static Color Blend(Color baseC, Color tint, bool additive)

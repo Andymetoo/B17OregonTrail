@@ -12,8 +12,23 @@ public class CrewSpriteView : MonoBehaviour
     
     [Header("Sprite References")]
     public Image crewSprite; // The main crew member sprite
-    public Sprite standingSprite; // Default/idle sprite
-    public Sprite inStationSprite; // When manning a station (optional)
+    
+    [Header("Base State Sprites")]
+    public Sprite idleNoStationSprite; // Standing around with no station assignment
+    public Sprite movingSprite; // Walking/moving between locations
+    public Sprite workingSprite; // Performing an action (repair, medical, fire)
+    public Sprite incapacitatedSprite; // Dead or unconscious
+    
+    [Header("Station-Specific Idle Sprites (B-17F)")]
+    public Sprite pilotIdleSprite; // Sitting in pilot seat
+    public Sprite copilotIdleSprite; // Sitting in copilot seat
+    public Sprite navigatorIdleSprite; // At navigator station with nose gun
+    public Sprite bombardierIdleSprite; // At bombardier station with nose gun
+    public Sprite radioOperatorIdleSprite; // At radio station
+    public Sprite topTurretIdleSprite; // In top turret
+    public Sprite ballTurretIdleSprite; // In ball turret
+    public Sprite waistGunIdleSprite; // At waist gun position (can use for both left/right)
+    public Sprite tailGunIdleSprite; // At tail gun position
     
     [Header("Status Visuals")]
     public Image statusTintOverlay; // Optional overlay to tint the sprite
@@ -96,17 +111,59 @@ public class CrewSpriteView : MonoBehaviour
     {
         if (crewSprite == null) return;
         
-        // Check if crew is at a station
-        bool isAtStation = !string.IsNullOrEmpty(trackedCrew.CurrentStationId);
+        Sprite spriteToUse = null;
         
-        if (isAtStation && inStationSprite != null)
+        // Priority 1: Incapacitated state (dead/unconscious)
+        if (trackedCrew.Status == CrewStatus.Dead || trackedCrew.Status == CrewStatus.Unconscious)
         {
-            crewSprite.sprite = inStationSprite;
+            spriteToUse = incapacitatedSprite;
         }
-        else if (standingSprite != null)
+        // Priority 2: Check visual state (what they're doing)
+        else if (trackedCrew.VisualState == CrewVisualState.Moving)
         {
-            crewSprite.sprite = standingSprite;
+            spriteToUse = movingSprite;
         }
+        else if (trackedCrew.VisualState == CrewVisualState.Working)
+        {
+            spriteToUse = workingSprite;
+        }
+        // Priority 3: Idle at station - use station-specific sprite
+        else if (trackedCrew.VisualState == CrewVisualState.IdleAtStation && trackedCrew.CurrentStation != StationType.None)
+        {
+            spriteToUse = GetStationIdleSprite(trackedCrew.CurrentStation);
+        }
+        // Priority 4: Idle with no station
+        else
+        {
+            spriteToUse = idleNoStationSprite;
+        }
+        
+        // Apply sprite (or keep current if null)
+        if (spriteToUse != null)
+        {
+            crewSprite.sprite = spriteToUse;
+        }
+    }
+    
+    /// <summary>
+    /// Get the appropriate idle sprite for a specific station.
+    /// </summary>
+    private Sprite GetStationIdleSprite(StationType station)
+    {
+        return station switch
+        {
+            StationType.Pilot => pilotIdleSprite,
+            StationType.CoPilot => copilotIdleSprite,
+            StationType.Navigator => navigatorIdleSprite,
+            StationType.Bombardier => bombardierIdleSprite,
+            StationType.RadioOperator => radioOperatorIdleSprite,
+            StationType.TopTurret => topTurretIdleSprite,
+            StationType.BallTurret => ballTurretIdleSprite,
+            StationType.LeftWaistGun => waistGunIdleSprite,
+            StationType.RightWaistGun => waistGunIdleSprite, // Same sprite for both waist guns
+            StationType.TailGun => tailGunIdleSprite,
+            _ => idleNoStationSprite // Fallback
+        };
     }
     
     private void UpdateProgressBar()

@@ -53,6 +53,9 @@ public class CrewAction {
     public float SuccessChance;          // Probability of success (0-1); rolled when action completes
     public bool RolledSuccess;           // Result of the success roll (set after Performing phase)
     public int RepairAmount;             // For repair actions: how much integrity to restore (sampled from config)
+    
+    // --- STATION TRACKING (for temporary vacation during actions) ---
+    public StationType PreviousStation = StationType.None;  // Station vacated when starting this action (to restore on return)
 
     public bool IsComplete => Elapsed >= Duration;
 }

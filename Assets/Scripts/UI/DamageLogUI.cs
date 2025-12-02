@@ -18,8 +18,8 @@ public class DamageLogUI : MonoBehaviour
     [Header("Popup Triggers")]
     [Tooltip("Show popup when a section starts burning.")] public bool popupOnFireStart = true;
     [Tooltip("Show popup when a section is destroyed.")] public bool popupOnSectionDestroyed = true;
-    [Tooltip("DEPRECATED: Crew injury popups now come from GameEvent outcomes.")] public bool popupOnSeriousCrewInjury = false;
-    [Tooltip("Show popup on any crew death.")] public bool popupOnCrewDeath = true;
+    [Tooltip("Show popup on crew death.")] public bool popupOnCrewDeath = true;
+    [Tooltip("NEVER show popup for regular damage - use EventLogUI stacking text only.")] public bool popupOnSectionDamage = false;
     
     private Queue<LogEntry> logEntries = new Queue<LogEntry>();
     
@@ -51,6 +51,16 @@ public class DamageLogUI : MonoBehaviour
     
     private void Start()
     {
+        // Validate UI reference
+        if (logText == null)
+        {
+            Debug.LogError("[DamageLogUI] logText is NULL! Assign TextMeshProUGUI in Inspector!");
+        }
+        else
+        {
+            Debug.Log($"[DamageLogUI] logText found: {logText.name}");
+        }
+        
         // Subscribe to PlaneManager damage events ONLY
         if (PlaneManager.Instance != null)
         {
@@ -126,7 +136,8 @@ public class DamageLogUI : MonoBehaviour
     private void AddMessage(string message, Color color)
     {
         logEntries.Enqueue(new LogEntry(message, color));
-        Debug.Log($"[DamageLog] {message}");
+        Debug.Log($"[DamageLogUI] Added message (queue size: {logEntries.Count}): {message}");
+        UpdateDisplay(); // Force immediate update
     }
     
     /// <summary>
@@ -141,23 +152,26 @@ public class DamageLogUI : MonoBehaviour
     {
         Debug.Log($"[DamageLogUI] OnSectionDamaged called for {section.Id} (Integrity: {section.Integrity})");
         
-        // Always report damage with current integrity
+        // Use EventLogUI for stacking text display - no toast popup
+        // Color-coded by severity
         if (section.Integrity <= 0)
         {
             AddMessage($"The {section.Id} is DESTROYED!", Color.red);
         }
         else if (section.Integrity < 30)
         {
-            AddMessage($"The {section.Id} is heavily damaged! (Integrity: {section.Integrity})", Color.red);
+            AddMessage($"The {section.Id} is heavily damaged! ({section.Integrity})", Color.red);
         }
         else if (section.Integrity < 60)
         {
-            AddMessage($"The {section.Id} is damaged. (Integrity: {section.Integrity})", new Color(1f, 0.5f, 0f)); // orange
+            AddMessage($"The {section.Id} damaged. ({section.Integrity})", new Color(1f, 0.5f, 0f)); // orange
         }
         else
         {
-            AddMessage($"The {section.Id} took damage. (Integrity: {section.Integrity})", new Color(1f, 0.8f, 0f)); // amber
+            AddMessage($"{section.Id} hit. ({section.Integrity})", new Color(1f, 0.8f, 0f)); // amber
         }
+        
+        // No toast popup for regular damage - only EventLogUI stacking text
     }
     
     private void OnSectionDestroyed(PlaneSectionState section)
@@ -176,7 +190,7 @@ public class DamageLogUI : MonoBehaviour
         AddMessage($"FIRE breaks out in the {section.Id}!", new Color(1f, 0.3f, 0f)); // bright red-orange
         if (popupOnFireStart)
         {
-            EventPopupUI.Instance?.Show($"Fire in {section.Id}!", new Color(1f,0.3f,0f), pause:false);
+            EventPopupUI.Instance?.Show($"Fire in {section.Id}!", new Color(1f,0.3f,0f), pause:true);
         }
     }
     
@@ -218,10 +232,7 @@ public class DamageLogUI : MonoBehaviour
         {
             Debug.Log($"[DamageLogUI] Crew injury: {statusMessage}");
             AddMessage(statusMessage, Color.red);
-            if (popupOnSeriousCrewInjury && (crew.Status == CrewStatus.Serious || crew.Status == CrewStatus.Critical))
-            {
-                EventPopupUI.Instance?.Show(statusMessage, Color.red, pause:false);
-            }
+            // Crew injuries now handled by EventLogUI stacking text only - no toast popups
         }
     }
     
