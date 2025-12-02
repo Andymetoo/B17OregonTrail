@@ -69,6 +69,12 @@ public class ChaosSimulator : MonoBehaviour
     private LegPhaseWeights _legPhaseWeights = new LegPhaseWeights();
 
     public bool IsInHazardPhase => _currentPhase == HazardPhase.Flak || _currentPhase == HazardPhase.Fighters;
+    
+    // Public accessors for UI/debugging
+    public HazardPhase CurrentPhase => _currentPhase;
+    public float CurrentDanger { get; private set; }
+    public float PhaseProgress => _phaseDuration > 0f ? _phaseTimer / _phaseDuration : 0f;
+    public float PhaseTimeRemaining => Mathf.Max(0f, _phaseDuration - _phaseTimer);
 
     private float timeSinceLastHazard;
     private float _nextHazardInterval;
@@ -96,12 +102,20 @@ public class ChaosSimulator : MonoBehaviour
         {
             var t = MissionManager.Instance.SegmentProgress01;
             float danger = Mathf.Lerp(_legStartDanger, _legEndDanger, t);
+            CurrentDanger = danger; // Store for external monitoring
             // Per-phase event interval shortens with higher danger
             float hazardIntervalMean = Mathf.Lerp(eventIntervalAtSafe, eventIntervalAtDanger, danger);
             float injuryIntervalMean = Mathf.Lerp(injuryIntervalAtSafe, injuryIntervalAtDanger, CurrentCrewInjuryWeight(danger));
 
             // Advance current phase timer and maybe transition
             _phaseTimer += deltaTime;
+            
+            // Log phase status every second (throttled)
+            if (Time.frameCount % 60 == 0)
+            {
+                Debug.Log($"[Chaos] Phase: {_currentPhase}, Timer: {_phaseTimer:F1}/{_phaseDuration:F1}s, Danger: {danger:F2}, NextHazard: {_nextHazardInterval:F1}s");
+            }
+            
             if (_phaseTimer >= _phaseDuration)
             {
                 ChooseNextPhase();
@@ -117,11 +131,13 @@ public class ChaosSimulator : MonoBehaviour
                 if (_nextHazardInterval <= 0f)
                 {
                     _nextHazardInterval = SampleInterval(hazardIntervalMean, hazardIntervalJitter, useExponentialTiming);
+                    Debug.Log($"[Chaos] Initialized hazard interval: {_nextHazardInterval:F1}s for {_currentPhase} phase");
                 }
                 if (timeSinceLastHazard >= _nextHazardInterval)
                 {
                     timeSinceLastHazard = 0f;
                     _nextHazardInterval = SampleInterval(hazardIntervalMean, hazardIntervalJitter, useExponentialTiming);
+                    Debug.Log($"[Chaos] Generating hazard event for {_currentPhase}, next in {_nextHazardInterval:F1}s");
                     if (_currentPhase == HazardPhase.Flak)
                     {
                         GenerateFlakEvent(danger);
@@ -153,10 +169,10 @@ public class ChaosSimulator : MonoBehaviour
         _legStartDanger = Mathf.Clamp01(startDanger);
         _legEndDanger = Mathf.Clamp01(endDanger);
         _legPhaseWeights = weights ?? new LegPhaseWeights();
-        // Start in cruise at leg begin
+        // Start in cruise at leg begin with grace period (3-5 seconds of peace)
         _currentPhase = HazardPhase.Cruise;
         _phaseTimer = 0f;
-        _phaseDuration = Random.Range(phaseMinDuration, phaseMaxDuration);
+        _phaseDuration = Random.Range(3f, 5f); // Initial grace period
         timeSinceLastHazard = 0f;
         timeSinceLastInjury = 0f;
         // Initialize randomized intervals
@@ -167,8 +183,17 @@ public class ChaosSimulator : MonoBehaviour
 
     private void ChooseNextPhase()
     {
+        var previousPhase = _currentPhase;
         _phaseTimer = 0f;
         _phaseDuration = Random.Range(phaseMinDuration, phaseMaxDuration);
+        
+        // Calculate current danger for event interval
+        float danger = _legStartDanger;
+        if (MissionManager.Instance != null && MissionManager.Instance.IsTravelling)
+        {
+            var t = MissionManager.Instance.SegmentProgress01;
+            danger = Mathf.Lerp(_legStartDanger, _legEndDanger, t);
+        }
 
         // Build normalized weights
         float wCruise = Mathf.Max(0f, _legPhaseWeights.Cruise);
@@ -186,23 +211,33 @@ public class ChaosSimulator : MonoBehaviour
         if (r < wCruise)
         {
             _currentPhase = HazardPhase.Cruise;
+            Debug.Log($"[Chaos] Phase transition: {previousPhase} → Cruise (duration: {_phaseDuration:F1}s, weights: C={wCruise:F2} F={wFlak:F2} Fi={wFighters:F2}, roll={r:F2})");
         }
         else if (r < wCruise + wFlak)
         {
             _currentPhase = HazardPhase.Flak;
+            Debug.Log($"[Chaos] Phase transition: {previousPhase} → Flak (duration: {_phaseDuration:F1}s, weights: C={wCruise:F2} F={wFlak:F2} Fi={wFighters:F2}, roll={r:F2})");
             EventLogUI.Instance?.Log("Flak bursts ahead!", Color.red);
-            EventPopupUI.Instance?.Show("Flak bursts ahead!", Color.red, pause:false);
-            // Reset hazard timer for new phase
+            // Pause for phase announcement - major transition
+            EventPopupUI.Instance?.Show("Flak bursts ahead!", Color.red, pause:true);
+            // Start with partial timer so first event fires quickly (1-3 seconds into phase)
+            float hazardIntervalMean = Mathf.Lerp(eventIntervalAtSafe, eventIntervalAtDanger, danger);
+            _nextHazardInterval = Random.Range(1f, 3f);
             timeSinceLastHazard = 0f;
-            _nextHazardInterval = 0f; // force resample on next tick
+            Debug.Log($"[Chaos] First flak event in {_nextHazardInterval:F1}s (mean interval: {hazardIntervalMean:F1}s)");
         }
         else
         {
             _currentPhase = HazardPhase.Fighters;
+            Debug.Log($"[Chaos] Phase transition: {previousPhase} → Fighters (duration: {_phaseDuration:F1}s, weights: C={wCruise:F2} F={wFlak:F2} Fi={wFighters:F2}, roll={r:F2})");
             EventLogUI.Instance?.Log("Enemy fighters spotted!", Color.red);
-            EventPopupUI.Instance?.Show("Enemy fighters spotted!", Color.red, pause:false);
+            // Pause for phase announcement - major transition
+            EventPopupUI.Instance?.Show("Enemy fighters spotted!", Color.red, pause:true);
+            // Start with partial timer so first event fires quickly (1-3 seconds into phase)
+            float hazardIntervalMean = Mathf.Lerp(eventIntervalAtSafe, eventIntervalAtDanger, danger);
+            _nextHazardInterval = Random.Range(1f, 3f);
             timeSinceLastHazard = 0f;
-            _nextHazardInterval = 0f;
+            Debug.Log($"[Chaos] First fighter attack in {_nextHazardInterval:F1}s (mean interval: {hazardIntervalMean:F1}s)");
         }
     }
     
@@ -214,15 +249,31 @@ public class ChaosSimulator : MonoBehaviour
         if (healthySections.Count == 0) return;
 
         var section = healthySections[Random.Range(0, healthySections.Count)];
+        int oldIntegrity = section.Integrity;
+        bool wasOnFire = section.OnFire;
+        
         float dmgT = CurrentPlaneDamageWeight(danger);
         int dmgMin = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, Mathf.Clamp01(dmgT * 0.5f)));
         int dmgMax = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, Mathf.Clamp01(0.5f + dmgT * 0.5f)));
         int damage = Random.Range(dmgMin, Mathf.Max(dmgMin+1, dmgMax));
 
         float fireWeight = CurrentFireWeight(danger);
-        PlaneManager.Instance.ApplyHitToSection(section.Id, damage, true, Mathf.Lerp(0.05f, 0.6f, fireWeight));
-        Debug.Log($"[Chaos] Flak hits {section.Id} for {damage}!");
-        DamageLogUI.Instance?.Log($"Flak hits {section.Id}!", Color.red);
+        float fireChance = Mathf.Lerp(0.05f, 0.6f, fireWeight);
+        PlaneManager.Instance.ApplyHitToSection(section.Id, damage, true, fireChance);
+        
+        // Direct damage notification - no flavor text during combat
+        if (section.Integrity <= 0 && oldIntegrity > 0)
+        {
+            EventPopupUI.Instance?.Show($"{section.Id} destroyed!", Color.red, pause:false);
+        }
+        else if (damage > 0)
+        {
+            string msg = $"{section.Id} hit! {damage} damage (Integrity: {section.Integrity})";
+            if (section.OnFire && !wasOnFire) msg += " - FIRE!";
+            EventPopupUI.Instance?.Show(msg, Color.red, pause:false);
+        }
+        
+        Debug.Log($"[Chaos] Flak hits {section.Id} for {damage}, integrity={section.Integrity}, fire={section.OnFire}");
     }
     
     private void GenerateFighterEvent(float danger)
@@ -232,19 +283,38 @@ public class ChaosSimulator : MonoBehaviour
         // Fighters strafe: multiple lighter hits, lower fire chance
         float dmgW = CurrentPlaneDamageWeight(danger);
         int passes = Random.Range(1, Random.value < dmgW ? 3 : 2);
+        
+        List<string> hitSections = new List<string>();
+        int totalDamage = 0;
+        bool anyFires = false;
+        
         for (int i = 0; i < passes; i++)
         {
             var viable = PlaneManager.Instance.Sections.Where(s => s.Integrity > 0).ToList();
             if (viable.Count == 0) break;
             var section = viable[Random.Range(0, viable.Count)];
+            bool wasOnFire = section.OnFire;
+            
             int dmgMin = Mathf.RoundToInt(Mathf.Lerp(2, minDamage, 0.5f));
             int dmgMax = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, dmgW));
             int damage = Random.Range(dmgMin, Mathf.Max(dmgMin+1, dmgMax));
             float fireChance = Mathf.Lerp(0.05f, 0.25f, CurrentFireWeight(danger) * 0.7f);
             PlaneManager.Instance.ApplyHitToSection(section.Id, damage, true, fireChance);
+            
+            if (!hitSections.Contains(section.Id)) hitSections.Add(section.Id);
+            totalDamage += damage;
+            if (section.OnFire && !wasOnFire) anyFires = true;
         }
-        Debug.Log("[Chaos] Fighter pass strafes the bomber!");
-        DamageLogUI.Instance?.Log("Fighter pass!", Color.red);
+        
+        // Direct damage notification - no flavor text during combat
+        if (totalDamage > 0)
+        {
+            string msg = $"Fighter pass! Hit: {string.Join(", ", hitSections)} ({totalDamage} damage)";
+            if (anyFires) msg += " - FIRE!";
+            EventPopupUI.Instance?.Show(msg, Color.red, pause:false);
+        }
+        
+        Debug.Log($"[Chaos] Fighters strafe: {passes} passes, {totalDamage} damage to {string.Join(", ", hitSections)}");
     }
     
     private void GenerateCrewInjuryEvent(float danger)
@@ -272,12 +342,18 @@ public class ChaosSimulator : MonoBehaviour
         
         string severity = newStatus switch
         {
-            CrewStatus.Light => "lightly injured",
+            CrewStatus.Light => "lightly wounded",
             CrewStatus.Serious => "seriously wounded",
-            CrewStatus.Critical => "critically injured",
+            CrewStatus.Critical => "CRITICALLY injured",
             _ => "injured"
         };
         
+        Color outcomeColor = newStatus == CrewStatus.Critical ? Color.red : 
+                            newStatus == CrewStatus.Serious ? new Color(1f, 0.5f, 0f) : 
+                            Color.yellow;
+        
+        // Direct injury notification - no flavor text during combat
+        EventPopupUI.Instance?.Show($"{crewMember.Name} ({crewMember.Role}) is {severity}!", outcomeColor, pause:false);
         Debug.Log($"[Chaos] {crewMember.Name} ({crewMember.Role}) is {severity}!");
     }
     

@@ -291,6 +291,104 @@ public class OrdersUIController : MonoBehaviour
             return;
         }
 
+        // Check if we should show consumable choice popup
+        bool hasConsumable = false;
+        SupplyType consumableType = SupplyType.MedKit;
+        
+        switch (pendingOrder)
+        {
+            case PendingOrderType.ExtinguishFire:
+                consumableType = SupplyType.FireExtinguisher;
+                hasConsumable = SupplyManager.Instance != null && SupplyManager.Instance.Inventory.GetCount(SupplyType.FireExtinguisher) > 0;
+                break;
+            case PendingOrderType.RepairSystem:
+                consumableType = SupplyType.RepairKit;
+                hasConsumable = SupplyManager.Instance != null && SupplyManager.Instance.Inventory.GetCount(SupplyType.RepairKit) > 0;
+                break;
+            case PendingOrderType.TreatInjury:
+                consumableType = SupplyType.MedKit;
+                hasConsumable = SupplyManager.Instance != null && SupplyManager.Instance.Inventory.GetCount(SupplyType.MedKit) > 0;
+                break;
+        }
+
+        if (hasConsumable && ActionConfirmationPopup.Instance != null && CrewActionConfig.Instance != null)
+        {
+            // Show choice popup
+            ShowConsumableChoicePopup(pendingOrder, consumableType);
+        }
+        else
+        {
+            // No consumable available or popup missing - execute base action immediately
+            ExecuteOrderCommand(useConsumable: false);
+        }
+    }
+
+    private void ShowConsumableChoicePopup(PendingOrderType orderType, SupplyType consumableType)
+    {
+        var config = CrewActionConfig.Instance;
+        var upgrades = UpgradeManager.Instance;
+        string actionTitle = "";
+        float baseDuration = 0f, consumableDuration = 0f;
+        float baseSuccess = 0f, consumableSuccess = 0f;
+        string baseEffect = "", consumableEffect = "";
+        int available = SupplyManager.Instance.Inventory.GetCount(consumableType);
+
+        switch (orderType)
+        {
+            case PendingOrderType.ExtinguishFire:
+                actionTitle = $"Extinguish Fire in {pendingTargetId}?";
+                baseDuration = upgrades != null ? upgrades.GetModifiedExtinguishDuration() : config.baseExtinguishDuration;
+                baseSuccess = upgrades != null ? upgrades.GetModifiedExtinguishSuccess() : config.baseExtinguishSuccessChance;
+                baseEffect = "Put out fire";
+                consumableDuration = upgrades != null ? upgrades.GetModifiedFireExtinguisherDuration() : config.fireExtinguisherDuration;
+                consumableSuccess = config.fireExtinguisherSuccessChance;
+                consumableEffect = "Put out fire (guaranteed)";
+                break;
+
+            case PendingOrderType.RepairSystem:
+                actionTitle = $"Repair {pendingTargetId}?";
+                int repairMin = upgrades != null ? upgrades.GetModifiedRepairAmountMin() : config.baseRepairAmountMin;
+                int repairMax = upgrades != null ? upgrades.GetModifiedRepairAmountMax() : config.baseRepairAmountMax;
+                int kitMin = upgrades != null ? upgrades.GetModifiedRepairKitAmountMin() : config.repairKitAmountMin;
+                int kitMax = upgrades != null ? upgrades.GetModifiedRepairKitAmountMax() : config.repairKitAmountMax;
+                baseDuration = upgrades != null ? upgrades.GetModifiedRepairDuration() : config.baseRepairDuration;
+                baseSuccess = upgrades != null ? upgrades.GetModifiedRepairSuccess() : config.baseRepairSuccessChance;
+                baseEffect = $"Restore {repairMin}-{repairMax} integrity";
+                consumableDuration = upgrades != null ? upgrades.GetModifiedRepairKitDuration() : config.repairKitDuration;
+                consumableSuccess = config.repairKitSuccessChance;
+                consumableEffect = $"Restore {kitMin}-{kitMax} integrity (guaranteed)";
+                break;
+
+            case PendingOrderType.TreatInjury:
+                actionTitle = $"Treat {pendingTargetId}?";
+                baseDuration = upgrades != null ? upgrades.GetModifiedMedicalDuration() : config.baseMedicalDuration;
+                baseSuccess = upgrades != null ? upgrades.GetModifiedMedicalSuccess() : config.baseMedicalSuccessChance;
+                baseEffect = "Heal one injury level";
+                consumableDuration = upgrades != null ? upgrades.GetModifiedMedkitDuration() : config.medkitDuration;
+                consumableSuccess = config.medkitSuccessChance;
+                consumableEffect = "Heal one injury level (guaranteed)";
+                break;
+        }
+
+        ActionConfirmationPopup.Instance.Show(
+            actionTitle,
+            baseDuration, baseSuccess, baseEffect,
+            consumableDuration, consumableSuccess, consumableEffect,
+            available,
+            (useConsumable) => ExecuteOrderCommand(useConsumable)
+        );
+    }
+
+    private void ExecuteOrderCommand(bool useConsumable)
+    {
+        var config = CrewActionConfig.Instance;
+        var upgrades = UpgradeManager.Instance;
+        if (config == null)
+        {
+            Debug.LogError("[OrdersUI] CrewActionConfig.Instance is null!");
+            return;
+        }
+
         CrewCommand cmd = null;
 
         switch (pendingOrder)
@@ -300,12 +398,28 @@ public class OrdersUIController : MonoBehaviour
                 break;
 
             case PendingOrderType.ExtinguishFire:
-                cmd = new ExtinguishFireCommand(selectedCrewId, pendingTargetId, 8f);
+            {
+                float duration = useConsumable 
+                    ? (upgrades != null ? upgrades.GetModifiedFireExtinguisherDuration() : config.fireExtinguisherDuration)
+                    : (upgrades != null ? upgrades.GetModifiedExtinguishDuration() : config.baseExtinguishDuration);
+                float successChance = useConsumable 
+                    ? config.fireExtinguisherSuccessChance 
+                    : (upgrades != null ? upgrades.GetModifiedExtinguishSuccess() : config.baseExtinguishSuccessChance);
+                cmd = new ExtinguishFireCommand(selectedCrewId, pendingTargetId, duration, successChance, useConsumable);
                 break;
+            }
 
             case PendingOrderType.RepairSystem:
-                cmd = new RepairSystemCommand(selectedCrewId, pendingTargetId, 10f);
+            {
+                float duration = useConsumable 
+                    ? (upgrades != null ? upgrades.GetModifiedRepairKitDuration() : config.repairKitDuration)
+                    : (upgrades != null ? upgrades.GetModifiedRepairDuration() : config.baseRepairDuration);
+                float successChance = useConsumable 
+                    ? config.repairKitSuccessChance 
+                    : (upgrades != null ? upgrades.GetModifiedRepairSuccess() : config.baseRepairSuccessChance);
+                cmd = new RepairSystemCommand(selectedCrewId, pendingTargetId, duration, successChance, useConsumable);
                 break;
+            }
 
             case PendingOrderType.TreatInjury:
             {
@@ -323,10 +437,17 @@ public class OrdersUIController : MonoBehaviour
                     OnPendingActionMessage?.Invoke($"{target.Name} is not injured.");
                     return;
                 }
-                cmd = new TreatInjuryCommand(selectedCrewId, pendingTargetId, 10f);
+                float duration = useConsumable 
+                    ? (upgrades != null ? upgrades.GetModifiedMedkitDuration() : config.medkitDuration)
+                    : (upgrades != null ? upgrades.GetModifiedMedicalDuration() : config.baseMedicalDuration);
+                float successChance = useConsumable 
+                    ? config.medkitSuccessChance 
+                    : (upgrades != null ? upgrades.GetModifiedMedicalSuccess() : config.baseMedicalSuccessChance);
+                cmd = new TreatInjuryCommand(selectedCrewId, pendingTargetId, duration, successChance, useConsumable);
                 break;
             }
         }
+
 
         if (cmd != null)
         {

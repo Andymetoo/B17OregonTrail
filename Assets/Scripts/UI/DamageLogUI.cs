@@ -18,7 +18,7 @@ public class DamageLogUI : MonoBehaviour
     [Header("Popup Triggers")]
     [Tooltip("Show popup when a section starts burning.")] public bool popupOnFireStart = true;
     [Tooltip("Show popup when a section is destroyed.")] public bool popupOnSectionDestroyed = true;
-    [Tooltip("Show popup on serious/critical crew injury.")] public bool popupOnSeriousCrewInjury = true;
+    [Tooltip("DEPRECATED: Crew injury popups now come from GameEvent outcomes.")] public bool popupOnSeriousCrewInjury = false;
     [Tooltip("Show popup on any crew death.")] public bool popupOnCrewDeath = true;
     
     private Queue<LogEntry> logEntries = new Queue<LogEntry>();

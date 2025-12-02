@@ -25,6 +25,8 @@ public class GameEvent : ScriptableObject
 
     public void ApplyEffects()
     {
+        System.Collections.Generic.List<string> outcomes = new System.Collections.Generic.List<string>();
+
         if (MissionManager.Instance != null && FuelDelta != 0f)
         {
             // Directly adjust fuel (could later route through a SupplyManager)
@@ -33,11 +35,41 @@ public class GameEvent : ScriptableObject
             // Reflect change by hacking private setter via event (optional: expose a method)
             // For now, log and rely on a future dedicated API.
             Debug.Log($"[GameEvent] Fuel change {FuelDelta} applied (new tentative: {newFuel}). Consider implementing a MissionManager.AdjustFuel API.");
+            if (FuelDelta > 0f)
+            {
+                outcomes.Add($"<color=green>+{FuelDelta} fuel</color>");
+            }
+            else
+            {
+                outcomes.Add($"<color=orange>{FuelDelta} fuel</color>");
+            }
         }
 
         if (RandomSectionDamage > 0 && PlaneManager.Instance != null)
         {
-            PlaneManager.Instance.ApplyRandomHit(RandomSectionDamage, FireChance > 0f, FireChance);
+            var sections = PlaneManager.Instance.Sections;
+            if (sections != null && sections.Count > 0)
+            {
+                var section = sections[Random.Range(0, sections.Count)];
+                int oldIntegrity = section.Integrity;
+                bool wasOnFire = section.OnFire;
+                
+                PlaneManager.Instance.ApplyHitToSection(section.Id, RandomSectionDamage, FireChance > 0f, FireChance);
+                
+                if (section.Integrity <= 0 && oldIntegrity > 0)
+                {
+                    outcomes.Add($"<color=red>{section.Id} DESTROYED!</color>");
+                }
+                else if (RandomSectionDamage > 0)
+                {
+                    outcomes.Add($"<color=orange>{section.Id} took {RandomSectionDamage} damage (Integrity: {section.Integrity})</color>");
+                }
+                
+                if (section.OnFire && !wasOnFire)
+                {
+                    outcomes.Add($"<color=red>{section.Id} on FIRE!</color>");
+                }
+            }
         }
 
         if (CrewInjuryChance > 0f && CrewManager.Instance != null)
@@ -51,9 +83,35 @@ public class GameEvent : ScriptableObject
                     float r = Random.value;
                     CrewStatus status = r < 0.15f ? CrewStatus.Critical : (r < 0.45f ? CrewStatus.Serious : CrewStatus.Light);
                     CrewManager.Instance.ApplyInjury(crew.Id, status);
+                    
+                    string severity = status switch
+                    {
+                        CrewStatus.Light => "lightly wounded",
+                        CrewStatus.Serious => "seriously wounded",
+                        CrewStatus.Critical => "CRITICALLY injured",
+                        _ => "injured"
+                    };
+                    
+                    Color injuryColor = status == CrewStatus.Critical ? Color.red :
+                                       status == CrewStatus.Serious ? new Color(1f, 0.5f, 0f) :
+                                       Color.yellow;
+                    
+                    outcomes.Add($"<color=#{ColorUtility.ToHtmlStringRGB(injuryColor)}>{crew.Name} is {severity}!</color>");
                     Debug.Log($"[GameEvent] Crew injury triggered: {crew.Name} -> {status}");
                 }
             }
         }
+        
+        // If nothing happened, add that
+        if (outcomes.Count == 0)
+        {
+            outcomes.Add("<color=green>Nothing happened.</color>");
+        }
+        
+        // Store outcomes for popup display
+        LastOutcomes = outcomes;
     }
+    
+    // Store last outcomes for display
+    [System.NonSerialized] public System.Collections.Generic.List<string> LastOutcomes = new System.Collections.Generic.List<string>();
 }

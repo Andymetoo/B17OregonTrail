@@ -1,12 +1,18 @@
 using System;
 using UnityEngine;
 
+/// <summary>
+/// DEPRECATED: This manager is superseded by ChaosSimulator for combat events.
+/// Keep enabledForTravel=false. Use ChaosSimulator for all hazard/combat mechanics.
+/// This class is retained for reference but should not be actively used.
+/// </summary>
+[System.Obsolete("EventManager is deprecated. Use ChaosSimulator instead.", false)]
 public class EventManager : MonoBehaviour
 {
     public static EventManager Instance { get; private set; }
 
-    [Header("Enable For Travel")]
-    [Tooltip("If false, this manager won't roll events during travel (use ChaosSimulator instead).")]
+    [Header("⚠️ DEPRECATED - Use ChaosSimulator Instead")]
+    [Tooltip("DEPRECATED: This manager is superseded by ChaosSimulator. Keep this false.")]
     public bool enabledForTravel = false;
 
     [Header("Check Intervals (seconds)")]
@@ -23,8 +29,8 @@ public class EventManager : MonoBehaviour
     [Tooltip("Interval between incident checks at max danger (danger=1).")]
     public float incidentIntervalDanger = 15f;
 
-    [Header("Danger Scaling 0-1")] 
-    [Range(0f,1f)] public float danger01 = 0f;
+    [Header("⚠️ Danger (DEPRECATED - see ChaosSimulator.CurrentDanger)")] 
+    [Range(0f,1f)] [Tooltip("DEPRECATED: Use ChaosSimulator.Instance.CurrentDanger instead.")] public float danger01 = 0f;
     [Tooltip("If true, danger value auto-lerps from start to end of segment using progress.")] public bool autoDangerByProgress = true;
     [Range(0f,1f)] public float minSegmentDanger = 0f;
     [Range(0f,1f)] public float maxSegmentDanger = 0.6f;

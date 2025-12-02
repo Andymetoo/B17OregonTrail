@@ -57,6 +57,13 @@ public class EventTriggerManager : MonoBehaviour
     public void Tick(float deltaTime)
     {
         if (MissionManager.Instance == null || !MissionManager.Instance.IsTravelling) return;
+        
+        // Only trigger random flavor events during Cruise phase
+        if (ChaosSimulator.Instance != null && ChaosSimulator.Instance.IsInHazardPhase)
+        {
+            return; // Skip random events during Flak/Fighter combat
+        }
+        
         _timer += deltaTime;
         if (_timer >= _nextInterval)
         {

@@ -187,6 +187,18 @@ public class EventPopupUI : MonoBehaviour
             Show("(Null Event)", Color.white, pause);
             return;
         }
-        Show(evt.Title + "\n" + evt.Description, evt.DisplayColor, pause, () => evt.ApplyEffects());
+        
+        // Apply effects first to generate outcomes
+        evt.ApplyEffects();
+        
+        // Build message: flavor text + outcomes
+        string message = evt.Title + "\n" + evt.Description;
+        
+        if (evt.LastOutcomes != null && evt.LastOutcomes.Count > 0)
+        {
+            message += "\n\n" + string.Join("\n", evt.LastOutcomes);
+        }
+        
+        Show(message, evt.DisplayColor, pause);
     }
 }

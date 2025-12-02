@@ -9,12 +9,12 @@ using UnityEngine;
 public class SupplyInventory
 {
     [Header("Medical Supplies")]
-    public int medKits = 3;
+    public int medKits = 2;
     public int morphine = 2;
     
     [Header("Damage Control")]  
-    public int fireExtinguishers = 4;
-    public int repairKits = 3;
+    public int fireExtinguishers = 2;
+    public int repairKits = 2;
     
     [Header("Ammunition")]
     public int machineGunAmmo = 1000; // Rounds remaining

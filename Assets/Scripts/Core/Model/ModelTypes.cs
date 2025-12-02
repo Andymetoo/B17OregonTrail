@@ -43,6 +43,13 @@ public class CrewAction {
     public List<Vector2> ReturnWaypoints; // path to traverse on the way back to ReturnPosition
     public int ReturnWaypointIndex = 0;
 
+    // --- CONSUMABLE & SUCCESS TRACKING ---
+    public bool UsesConsumable;          // True if using a consumable item (medkit, repair kit, fire extinguisher)
+    public SupplyType ConsumableType;    // Which consumable type is being used
+    public float SuccessChance;          // Probability of success (0-1); rolled when action completes
+    public bool RolledSuccess;           // Result of the success roll (set after Performing phase)
+    public int RepairAmount;             // For repair actions: how much integrity to restore (sampled from config)
+
     public bool IsComplete => Elapsed >= Duration;
 }
 

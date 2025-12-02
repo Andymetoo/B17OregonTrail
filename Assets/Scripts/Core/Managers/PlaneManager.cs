@@ -16,6 +16,10 @@ public class PlaneManager : MonoBehaviour
     /// </summary>
     public List<PlaneSystemState> Systems = new List<PlaneSystemState>();
 
+    // Add this to an existing manager like GameStateManager or create a new bootstrap object:
+    [Header("Consumables Scriptable Object")]
+    [SerializeField] private CrewActionConfig crewActionConfig;
+
     [Header("Cruise Speed")]
     [Tooltip("Base cruise speed (all engines operational). Miles per hour.")]
     public float baseCruiseSpeedMph = 180f;
@@ -201,7 +205,7 @@ public class PlaneManager : MonoBehaviour
     /// <summary>
     /// Example repair method. You can tune this later.
     /// </summary>
-    public bool TryRepairSystem(string systemId, float repairStrength = 1f)
+    public bool TryRepairSystem(string systemId, int repairAmount = 20)
     {
         var system = GetSystem(systemId);
         if (system == null) return false;
@@ -221,38 +225,37 @@ public class PlaneManager : MonoBehaviour
         system.Status = SystemStatus.Operational;
         system.Special = SpecialState.None;
         OnSystemStatusChanged?.Invoke(system);
-        
+
         // Also repair the section that contains this system
-        TryRepairSection(system.SectionId, repairStrength);
-        
+        TryRepairSection(system.SectionId, repairAmount);
+
         return true;
     }
-    
+
     /// <summary>
     /// Repair a section's structural integrity.
     /// </summary>
-    public bool TryRepairSection(string sectionId, float repairStrength = 1f)
+    public bool TryRepairSection(string sectionId, int repairAmount = 20)
     {
         var section = GetSection(sectionId);
         if (section == null) return false;
-        
+
         // Can't repair if destroyed
         if (section.Integrity <= destroyedIntegrityThreshold) return false;
         // Can't repair if already at max integrity
         if (section.Integrity >= 100) return false;
         // Can't repair while on fire
         if (section.OnFire) return false;
-        
-        // Restore some integrity (default 20 points per repair action)
-        int repairAmount = Mathf.FloorToInt(20f * repairStrength);
+
+        // Restore integrity using the provided amount (from CrewActionConfig bell curve)
         int oldIntegrity = section.Integrity;
         section.Integrity = Mathf.Min(100, section.Integrity + repairAmount);
-        
+
         if (section.Integrity != oldIntegrity)
         {
             OnSectionDamaged?.Invoke(section); // Reuse this event for repairs too
         }
-        
+
         return true;
     }
 

@@ -61,12 +61,16 @@ public class ExtinguishFireCommand : CrewCommand
 {
     public string SectionId;
     public float Duration;
+    public float SuccessChance;
+    public bool UseConsumable;
 
-    public ExtinguishFireCommand(string crewId, string sectionId, float duration = 8f)
+    public ExtinguishFireCommand(string crewId, string sectionId, float duration = 8f, float successChance = 0.75f, bool useConsumable = false)
         : base(crewId)
     {
         SectionId = sectionId;
         Duration = duration;
+        SuccessChance = successChance;
+        UseConsumable = useConsumable;
     }
 
     public override void Execute(CrewManager crewMgr, PlaneManager planeMgr)
@@ -76,7 +80,10 @@ public class ExtinguishFireCommand : CrewCommand
             Type = ActionType.ExtinguishFire,
             TargetId = SectionId,
             Duration = Duration,
-            Elapsed = 0f
+            Elapsed = 0f,
+            SuccessChance = SuccessChance,
+            UsesConsumable = UseConsumable,
+            ConsumableType = SupplyType.FireExtinguisher
         };
 
         crewMgr.TryAssignAction(CrewId, action);
@@ -91,22 +98,50 @@ public class RepairSystemCommand : CrewCommand
 {
     public string SystemId;
     public float Duration;
+    public float SuccessChance;
+    public bool UseConsumable;
 
-    public RepairSystemCommand(string crewId, string systemId, float duration = 10f)
+    public RepairSystemCommand(string crewId, string systemId, float duration = 10f, float successChance = 0.70f, bool useConsumable = false)
         : base(crewId)
     {
             SystemId = systemId;
             Duration = duration;
+            SuccessChance = successChance;
+            UseConsumable = useConsumable;
         }
 
     public override void Execute(CrewManager crewMgr, PlaneManager planeMgr)
     {
+        var config = CrewActionConfig.Instance;
+        var upgrades = UpgradeManager.Instance;
+        int repairAmount = 0;
+        
+        if (config != null)
+        {
+            if (UseConsumable)
+            {
+                int min = upgrades != null ? upgrades.GetModifiedRepairKitAmountMin() : config.repairKitAmountMin;
+                int max = upgrades != null ? upgrades.GetModifiedRepairKitAmountMax() : config.repairKitAmountMax;
+                repairAmount = config.SampleRepairAmount(min, max);
+            }
+            else
+            {
+                int min = upgrades != null ? upgrades.GetModifiedRepairAmountMin() : config.baseRepairAmountMin;
+                int max = upgrades != null ? upgrades.GetModifiedRepairAmountMax() : config.baseRepairAmountMax;
+                repairAmount = config.SampleRepairAmount(min, max);
+            }
+        }
+
         var action = new CrewAction
         {
             Type = ActionType.Repair,
             TargetId = SystemId,
             Duration = Duration,
-            Elapsed = 0f
+            Elapsed = 0f,
+            SuccessChance = SuccessChance,
+            UsesConsumable = UseConsumable,
+            ConsumableType = SupplyType.RepairKit,
+            RepairAmount = repairAmount
         };
 
         crewMgr.TryAssignAction(CrewId, action);
@@ -121,12 +156,16 @@ public class TreatInjuryCommand : CrewCommand
 {
     public string TargetCrewId;
     public float Duration;
+    public float SuccessChance;
+    public bool UseConsumable;
 
-    public TreatInjuryCommand(string medicCrewId, string targetCrewId, float duration = 10f)
+    public TreatInjuryCommand(string medicCrewId, string targetCrewId, float duration = 10f, float successChance = 0.65f, bool useConsumable = false)
         : base(medicCrewId)
     {
         TargetCrewId = targetCrewId;
         Duration = duration;
+        SuccessChance = successChance;
+        UseConsumable = useConsumable;
     }
 
     public override void Execute(CrewManager crewMgr, PlaneManager planeMgr)
@@ -136,7 +175,10 @@ public class TreatInjuryCommand : CrewCommand
             Type = ActionType.TreatInjury,
             TargetId = TargetCrewId,
             Duration = Duration,
-            Elapsed = 0f
+            Elapsed = 0f,
+            SuccessChance = SuccessChance,
+            UsesConsumable = UseConsumable,
+            ConsumableType = SupplyType.MedKit
         };
 
         crewMgr.TryAssignAction(CrewId, action);

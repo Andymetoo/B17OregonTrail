@@ -375,6 +375,43 @@ public class CrewManager : MonoBehaviour
     {
         var action = crew.CurrentAction;
         
+        // Roll for success
+        float roll = UnityEngine.Random.value;
+        bool success = roll <= action.SuccessChance;
+        action.RolledSuccess = success;
+        
+        if (!success)
+        {
+            // Action failed - show feedback but don't apply effect
+            string actionVerb = action.Type switch
+            {
+                ActionType.ExtinguishFire => "extinguish the fire",
+                ActionType.Repair => "complete repairs",
+                ActionType.TreatInjury => "treat the injury",
+                _ => "complete the action"
+            };
+            
+            EventPopupUI.Instance?.Show(
+                $"{crew.Name} failed to {actionVerb}! (rolled {roll:0.00} vs {action.SuccessChance:0.00})",
+                Color.yellow,
+                pause: false
+            );
+            
+            EventLogUI.Instance?.Log($"{crew.Name} failed to {actionVerb}.", Color.yellow);
+            return; // Don't apply effect
+        }
+        
+        // Action succeeded - consume item if used
+        if (action.UsesConsumable && SupplyManager.Instance != null)
+        {
+            bool consumed = SupplyManager.Instance.Inventory.TryConsume(action.ConsumableType, 1);
+            if (!consumed)
+            {
+                Debug.LogWarning($"[CrewManager] Failed to consume {action.ConsumableType} for {crew.Name}'s action!");
+            }
+        }
+        
+        // Apply the effect
         switch (action.Type)
         {
             case ActionType.Move:
@@ -391,10 +428,11 @@ public class CrewManager : MonoBehaviour
             case ActionType.Repair:
                 if (PlaneManager.Instance != null)
                 {
-                    bool repaired = PlaneManager.Instance.TryRepairSystem(action.TargetId);
+                    // Pass repair amount from action
+                    bool repaired = PlaneManager.Instance.TryRepairSystem(action.TargetId, action.RepairAmount);
                     if (!repaired)
                     {
-                        PlaneManager.Instance.TryRepairSection(action.TargetId);
+                        PlaneManager.Instance.TryRepairSection(action.TargetId, action.RepairAmount);
                     }
                 }
                 break;
