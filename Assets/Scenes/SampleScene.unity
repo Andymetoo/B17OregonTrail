@@ -373,6 +373,7 @@ RectTransform:
   m_Children:
   - {fileID: 1457379364}
   - {fileID: 543063219}
+  - {fileID: 1826517409}
   - {fileID: 57563797}
   - {fileID: 269053736}
   - {fileID: 1992619178}
@@ -418,6 +419,7 @@ Transform:
   - {fileID: 1482721746}
   - {fileID: 1851976248}
   - {fileID: 1041388900}
+  - {fileID: 1773889115}
   - {fileID: 437949868}
   - {fileID: 437649752}
   - {fileID: 1851350003}
@@ -1532,8 +1534,10 @@ MonoBehaviour:
   sectionId: LeftWaist
   image: {fileID: 651410677}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!1 &181494791
 GameObject:
   m_ObjectHideFlags: 0
@@ -3411,8 +3415,10 @@ MonoBehaviour:
   sectionId: NoseBomb
   image: {fileID: 620776437}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!224 &316661617 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 7366568765713371302, guid: 95b99f0be16cb7e428a37c49e099da52, type: 3}
@@ -3435,7 +3441,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &330402024
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4303,6 +4309,104 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!1 &426111537
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 426111538}
+  - component: {fileID: 426111541}
+  - component: {fileID: 426111540}
+  - component: {fileID: 426111539}
+  m_Layer: 5
+  m_Name: DangerPhases
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &426111538
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 426111537}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 590775224}
+  m_Father: {fileID: 1826517409}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 40, y: 40}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &426111539
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 426111537}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2a367e1a1d81bb041b932d64d4ce4bca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  flakSprite: {fileID: 21300000, guid: 626fbf76f87a5b04a97f64ef4b9051d6, type: 3}
+  fightersSprite: {fileID: 21300000, guid: 29387287f3c50ef45816940f73a2cf2e, type: 3}
+  phaseImage: {fileID: 426111540}
+  attackFlashImage: {fileID: 590775225}
+  hideOnCruise: 1
+  imageTint: {r: 1, g: 1, b: 1, a: 1}
+  attackFlashSprite: {fileID: 0}
+  flashDuration: 0.5
+  flashTint: {r: 1, g: 0, b: 0, a: 1}
+--- !u!114 &426111540
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 426111537}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: 626fbf76f87a5b04a97f64ef4b9051d6, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &426111541
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 426111537}
+  m_CullTransparentMesh: 1
 --- !u!1 &433956865
 GameObject:
   m_ObjectHideFlags: 0
@@ -4499,6 +4603,8 @@ MonoBehaviour:
       RolledSuccess: 0
       RepairAmount: 0
     InjuryTimer: 0
+    DefaultStation: 11
+    CurrentStation: 11
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
     HomeOffset: {x: 0, y: 0}
@@ -4528,6 +4634,8 @@ MonoBehaviour:
       RolledSuccess: 0
       RepairAmount: 0
     InjuryTimer: 0
+    DefaultStation: 11
+    CurrentStation: 11
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
     HomeOffset: {x: 0, y: 0}
@@ -4557,6 +4665,8 @@ MonoBehaviour:
       RolledSuccess: 0
       RepairAmount: 0
     InjuryTimer: 0
+    DefaultStation: 11
+    CurrentStation: 11
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
     HomeOffset: {x: -2, y: -1}
@@ -4586,6 +4696,8 @@ MonoBehaviour:
       RolledSuccess: 0
       RepairAmount: 0
     InjuryTimer: 0
+    DefaultStation: 11
+    CurrentStation: 11
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
     HomeOffset: {x: 3, y: 1}
@@ -4615,6 +4727,8 @@ MonoBehaviour:
       RolledSuccess: 0
       RepairAmount: 0
     InjuryTimer: 0
+    DefaultStation: 11
+    CurrentStation: 11
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
     HomeOffset: {x: 0, y: 0}
@@ -4644,6 +4758,8 @@ MonoBehaviour:
       RolledSuccess: 0
       RepairAmount: 0
     InjuryTimer: 0
+    DefaultStation: 11
+    CurrentStation: 11
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
     HomeOffset: {x: 0, y: 0}
@@ -4673,6 +4789,8 @@ MonoBehaviour:
       RolledSuccess: 0
       RepairAmount: 0
     InjuryTimer: 0
+    DefaultStation: 11
+    CurrentStation: 11
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
     HomeOffset: {x: 0, y: 0}
@@ -4702,6 +4820,8 @@ MonoBehaviour:
       RolledSuccess: 0
       RepairAmount: 0
     InjuryTimer: 0
+    DefaultStation: 11
+    CurrentStation: 11
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
     HomeOffset: {x: 0, y: 0}
@@ -4731,6 +4851,8 @@ MonoBehaviour:
       RolledSuccess: 0
       RepairAmount: 0
     InjuryTimer: 0
+    DefaultStation: 11
+    CurrentStation: 11
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
     HomeOffset: {x: 0, y: 0}
@@ -4760,6 +4882,8 @@ MonoBehaviour:
       RolledSuccess: 0
       RepairAmount: 0
     InjuryTimer: 0
+    DefaultStation: 11
+    CurrentStation: 11
     HomePosition: {x: 0, y: 0}
     CurrentPosition: {x: 0, y: 0}
     HomeOffset: {x: 0, y: 0}
@@ -5741,8 +5865,10 @@ MonoBehaviour:
   sectionId: TopTurret
   image: {fileID: 924691525}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!1 &574485256
 GameObject:
   m_ObjectHideFlags: 0
@@ -5924,6 +6050,81 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 586448526}
+  m_CullTransparentMesh: 1
+--- !u!1 &590775223
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 590775224}
+  - component: {fileID: 590775226}
+  - component: {fileID: 590775225}
+  m_Layer: 5
+  m_Name: AttackAtttempt
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &590775224
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 590775223}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 426111538}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: -25.9, y: -2.3}
+  m_SizeDelta: {x: 10, y: 10}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &590775225
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 590775223}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: 49ac181438c02654caf49496078d7087, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &590775226
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 590775223}
   m_CullTransparentMesh: 1
 --- !u!1 &610252591
 GameObject:
@@ -8989,8 +9190,10 @@ MonoBehaviour:
   sectionId: Cockpit
   image: {fileID: 1608204363}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!1 &1023661396
 GameObject:
   m_ObjectHideFlags: 0
@@ -10301,8 +10504,10 @@ MonoBehaviour:
   sectionId: FuselageBack
   image: {fileID: 856295362}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!1 &1193070186
 GameObject:
   m_ObjectHideFlags: 0
@@ -11561,8 +11766,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4278190080
-  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
+    rgba: 4294967295
+  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -13723,8 +13928,10 @@ MonoBehaviour:
   sectionId: NoseNav
   image: {fileID: 1770001624}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!1 &1656046967
 GameObject:
   m_ObjectHideFlags: 0
@@ -13824,7 +14031,7 @@ MonoBehaviour:
   startingFuel: 50
   useDistanceForTiming: 1
   autoStartFirstSegment: 1
-  travelSpeedScale: 15
+  travelSpeedScale: 24
 --- !u!1 &1697935104
 GameObject:
   m_ObjectHideFlags: 0
@@ -13987,7 +14194,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 0.38431373}
+  m_Color: {r: 0, g: 0, b: 0, a: 0.88235295}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -14301,8 +14508,10 @@ MonoBehaviour:
   sectionId: Tail
   image: {fileID: 2096569221}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!1 &1770001622
 GameObject:
   m_ObjectHideFlags: 0
@@ -14378,6 +14587,56 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1770001622}
   m_CullTransparentMesh: 1
+--- !u!1 &1773889114
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1773889115}
+  - component: {fileID: 1773889116}
+  m_Layer: 0
+  m_Name: "StationManager\U0001F3D7"
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1773889115
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1773889114}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 51381316}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1773889116
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1773889114}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9e3b193f480be8f41b9d35a2c2766a71, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  AllStations:
+  - Type: 0
+    StationId: 
+    SectionId: 
+    OccupiedByCrewId: 
+    IsOperational: 0
 --- !u!1 &1781173147
 GameObject:
   m_ObjectHideFlags: 0
@@ -14529,8 +14788,10 @@ MonoBehaviour:
   sectionId: Bombay
   image: {fileID: 275068546}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!1 &1787356303
 GameObject:
   m_ObjectHideFlags: 0
@@ -14774,6 +15035,42 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1804059702}
   m_CullTransparentMesh: 1
+--- !u!1 &1826517408
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1826517409}
+  m_Layer: 5
+  m_Name: DebugGFX
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1826517409
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1826517408}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 426111538}
+  m_Father: {fileID: 25371593}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: -69.1, y: 37.8}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1829440396
 GameObject:
   m_ObjectHideFlags: 0
@@ -15885,8 +16182,10 @@ MonoBehaviour:
   sectionId: BallTurret
   image: {fileID: 2096523420}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!1 &1917044839
 GameObject:
   m_ObjectHideFlags: 0
@@ -16171,8 +16470,10 @@ MonoBehaviour:
   sectionId: RadioRoom
   image: {fileID: 2032838400}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!1 &1976715973
 GameObject:
   m_ObjectHideFlags: 0
@@ -16324,8 +16625,10 @@ MonoBehaviour:
   sectionId: RightWaist
   image: {fileID: 532369313}
   healthyColor: {r: 0, g: 0.8, b: 0, a: 1}
-  damagedColor: {r: 0.9, g: 0.8, b: 0, a: 1}
+  criticalColor: {r: 0.9, g: 0, b: 0, a: 1}
   fireColor: {r: 0.9, g: 0.2, b: 0, a: 1}
+  maxIntegrity: 100
+  minIntegrity: 0
 --- !u!1 &1983297350
 GameObject:
   m_ObjectHideFlags: 0
@@ -16755,8 +17058,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   enableChaos: 1
-  eventIntervalAtSafe: 20
-  eventIntervalAtDanger: 6
+  eventIntervalAtSafe: 14
+  eventIntervalAtDanger: 5
   defaultDanger: 0.3
   useExponentialTiming: 1
   hazardIntervalJitter: 0.35
@@ -16777,8 +17080,12 @@ MonoBehaviour:
   seriousSeverityWeightMax: 0.5
   criticalSeverityWeightMin: 0.05
   criticalSeverityWeightMax: 0.2
-  phaseMinDuration: 6
-  phaseMaxDuration: 14
+  cruiseMinDuration: 8
+  cruiseMaxDuration: 16
+  flakMinDuration: 6
+  flakMaxDuration: 14
+  fightersMinDuration: 10
+  fightersMaxDuration: 20
   cruiseBias: 0.6
 --- !u!1 &2032838398
 GameObject:

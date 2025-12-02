@@ -166,11 +166,11 @@ public class CrewSpriteView : MonoBehaviour
         return status switch
         {
             CrewStatus.Healthy => healthyTint,
-            CrewStatus.Light => lightInjuryTint,
+            CrewStatus.Light => lightInjuryTint, // Slight tint but still functional
             CrewStatus.Serious => seriousInjuryTint,
             CrewStatus.Critical => criticalTint,
-            CrewStatus.Dead => Color.gray,
-            CrewStatus.Unconscious => Color.gray,
+            CrewStatus.Dead => Color.gray, // Grayed out
+            CrewStatus.Unconscious => Color.gray, // Grayed out
             _ => Color.white
         };
     }

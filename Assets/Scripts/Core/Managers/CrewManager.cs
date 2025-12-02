@@ -58,6 +58,14 @@ public class CrewManager : MonoBehaviour
         ResetAllCrewState();
         _positionsInitialized = true;
         if (verboseLogging) Debug.Log("[CrewManager] Positions initialized.");
+        
+        // Hook up StationManager events
+        if (StationManager.Instance != null)
+        {
+            StationManager.Instance.AssignDefaultStations();
+            OnCrewDied += StationManager.Instance.OnCrewDied;
+            OnCrewInjuryStageChanged += StationManager.Instance.OnCrewIncapacitated;
+        }
     }
     
     /// <summary>
@@ -153,9 +161,8 @@ public class CrewManager : MonoBehaviour
         // Dead crew do not progress
         if (crew.Status == CrewStatus.Dead) return;
 
-        // Only damaged statuses tick down
-        if (crew.Status == CrewStatus.Light ||
-            crew.Status == CrewStatus.Serious ||
+        // Only Serious and Critical tick down; Light injuries are stable
+        if (crew.Status == CrewStatus.Serious ||
             crew.Status == CrewStatus.Critical)
         {
             crew.InjuryTimer -= deltaTime;
@@ -169,14 +176,9 @@ public class CrewManager : MonoBehaviour
 
     private void ProgressInjury(CrewMember crew)
     {
-        // Move to next stage
+        // Move to next stage (Light no longer progresses)
         switch (crew.Status)
         {
-            case CrewStatus.Light:
-                crew.Status = CrewStatus.Serious;
-                crew.InjuryTimer = 60f; // example number
-                break;
-
             case CrewStatus.Serious:
                 crew.Status = CrewStatus.Critical;
                 crew.InjuryTimer = 45f;
@@ -193,10 +195,10 @@ public class CrewManager : MonoBehaviour
 
     private void TickAction(CrewMember crew, float deltaTime)
     {
-        // Cancel if crew becomes injured/unhealthy while performing an action
-        if (crew.Status != CrewStatus.Healthy)
+        // Cancel if crew becomes seriously injured while performing an action (Light injuries OK)
+        if (crew.Status != CrewStatus.Healthy && crew.Status != CrewStatus.Light)
         {
-            CancelCurrentAction(crew, "Crew became injured or incapacitated");
+            CancelCurrentAction(crew, "Crew became seriously injured or incapacitated");
             return;
         }
         var action = crew.CurrentAction;
@@ -269,7 +271,7 @@ public class CrewManager : MonoBehaviour
                     crew.VisualState = CrewVisualState.Moving;
 
                     // Build return path along ordered sections for section-based actions
-                    if ((action.Type == ActionType.Repair || action.Type == ActionType.ExtinguishFire) && CrewPositionRegistry.Instance != null)
+                    if ((action.Type == ActionType.Repair || action.Type == ActionType.ExtinguishFire || action.Type == ActionType.TreatInjury || action.Type == ActionType.OccupyStation) && CrewPositionRegistry.Instance != null)
                     {
                         var reg = CrewPositionRegistry.Instance;
                         string fromSection = !string.IsNullOrEmpty(action.TargetSectionId)
@@ -388,6 +390,7 @@ public class CrewManager : MonoBehaviour
                 ActionType.ExtinguishFire => "extinguish the fire",
                 ActionType.Repair => "complete repairs",
                 ActionType.TreatInjury => "treat the injury",
+                ActionType.OccupyStation => "occupy the station",
                 _ => "complete the action"
             };
             
@@ -445,6 +448,19 @@ public class CrewManager : MonoBehaviour
                 crew.CurrentStationId = action.TargetId;
                 break;
 
+            case ActionType.OccupyStation:
+                // Assign crew to the station via StationManager
+                if (StationManager.Instance != null)
+                {
+                    var station = StationManager.Instance.GetStationById(action.TargetId);
+                    if (station != null)
+                    {
+                        StationManager.Instance.AssignCrewToStation(crew.Id, station);
+                        crew.CurrentStationId = action.TargetId;
+                    }
+                }
+                break;
+
             case ActionType.Idle:
             default:
                 break;
@@ -493,6 +509,10 @@ public class CrewManager : MonoBehaviour
                     }
                 }
                 break;
+            case ActionType.ManStation:
+            case ActionType.OccupyStation:
+                // Stations don't have exclusive locks
+                break;
         }
     }
 
@@ -539,6 +559,54 @@ public class CrewManager : MonoBehaviour
                         path.RemoveAt(0);
                     action.Waypoints = path;
                     action.CurrentWaypointIndex = 0;
+                }
+            }
+        }
+        // TreatInjury also uses section pathfinding to reach target crew's section
+        else if (action.Type == ActionType.TreatInjury)
+        {
+            var targetCrew = GetCrewById(action.TargetId);
+            if (targetCrew != null)
+            {
+                var reg = CrewPositionRegistry.Instance;
+                if (reg != null)
+                {
+                    string startSection = reg.GetNearestSectionIdByPosition(crew.CurrentPosition);
+                    string targetSection = reg.GetNearestSectionIdByPosition(targetCrew.CurrentPosition);
+                    var path = reg.GetSectionPathPositionsBetween(startSection, targetSection);
+                    if (path != null && path.Count > 0)
+                    {
+                        if (Vector2.Distance(crew.CurrentPosition, path[0]) < 1f && path.Count > 1)
+                            path.RemoveAt(0);
+                        action.Waypoints = path;
+                        action.CurrentWaypointIndex = 0;
+                    }
+                }
+            }
+        }
+        // OccupyStation uses section pathfinding to reach target station's section
+        else if (action.Type == ActionType.OccupyStation)
+        {
+            if (StationManager.Instance != null)
+            {
+                var station = StationManager.Instance.GetStationById(action.TargetId);
+                if (station != null)
+                {
+                    var reg = CrewPositionRegistry.Instance;
+                    if (reg != null)
+                    {
+                        string startSection = reg.GetNearestSectionIdByPosition(crew.CurrentPosition);
+                        string targetSection = station.SectionId;
+                        var path = reg.GetSectionPathPositionsBetween(startSection, targetSection);
+                        if (path != null && path.Count > 0)
+                        {
+                            if (Vector2.Distance(crew.CurrentPosition, path[0]) < 1f && path.Count > 1)
+                                path.RemoveAt(0);
+                            action.Waypoints = path;
+                            action.CurrentWaypointIndex = 0;
+                        }
+                        action.TargetSectionId = targetSection;
+                    }
                 }
             }
         }
@@ -590,6 +658,7 @@ public class CrewManager : MonoBehaviour
                 }
                 case ActionType.Move:
                 case ActionType.ManStation:
+                case ActionType.OccupyStation:
                 {
                     var rect = CrewPositionRegistry.Instance?.GetStationRect(action.TargetId);
                     string rectInfo = rect == null ? "<null>" : $"{BuildPath(rect)} pos={rect.anchoredPosition}";
@@ -651,6 +720,7 @@ public class CrewManager : MonoBehaviour
                 
             case ActionType.Move:
             case ActionType.ManStation:
+            case ActionType.OccupyStation:
                 // Move to station position
                 var sPos = CrewPositionRegistry.Instance.GetStationPosition(action.TargetId);
                 if (sPos == Vector2.zero)
@@ -687,10 +757,10 @@ public class CrewManager : MonoBehaviour
             }
             return true;
         }
-        // Only healthy crew can be assigned actions
-        if (crew.Status != CrewStatus.Healthy)
+        // Healthy and Light injured crew can perform actions
+        if (crew.Status != CrewStatus.Healthy && crew.Status != CrewStatus.Light)
         {
-            if (verboseLogging && ShouldTrace(crew)) Debug.Log($"[Trace] Reject assign (not healthy) crew={crew.Id} status={crew.Status}");
+            if (verboseLogging && ShouldTrace(crew)) Debug.Log($"[Trace] Reject assign (not healthy/light) crew={crew.Id} status={crew.Status}");
             return false;
         }
         if (crew.CurrentAction != null)
@@ -859,6 +929,11 @@ public class CrewManager : MonoBehaviour
             case CrewStatus.Serious:
                 target.Status = CrewStatus.Light;
                 target.InjuryTimer = 90f;
+                // Light injury no longer incapacitates - if they have an action they can resume
+                if (target.CurrentAction != null && target.CurrentAction.Phase == ActionPhase.Performing)
+                {
+                    target.VisualState = CrewVisualState.Working;
+                }
                 break;
             case CrewStatus.Light:
                 target.Status = CrewStatus.Healthy;

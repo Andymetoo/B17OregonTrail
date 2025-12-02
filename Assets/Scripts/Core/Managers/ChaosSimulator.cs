@@ -54,10 +54,21 @@ public class ChaosSimulator : MonoBehaviour
     
     // Phase scheduling
     public enum HazardPhase { Cruise, Flak, Fighters }
-    [Header("Phase Scheduling Defaults")]
-    [SerializeField] private float phaseMinDuration = 6f;
-    [SerializeField] private float phaseMaxDuration = 14f;
-    [SerializeField] private float cruiseBias = 0.6f; // fallback if no leg weights
+    [Header("Phase Duration Ranges (seconds)")]
+    [Tooltip("Minimum duration for Cruise phases.")]
+    [SerializeField] private float cruiseMinDuration = 8f;
+    [Tooltip("Maximum duration for Cruise phases.")]
+    [SerializeField] private float cruiseMaxDuration = 20f;
+    [Tooltip("Minimum duration for Flak phases.")]
+    [SerializeField] private float flakMinDuration = 6f;
+    [Tooltip("Maximum duration for Flak phases.")]
+    [SerializeField] private float flakMaxDuration = 14f;
+    [Tooltip("Minimum duration for Fighter phases.")]
+    [SerializeField] private float fightersMinDuration = 6f;
+    [Tooltip("Maximum duration for Fighter phases.")]
+    [SerializeField] private float fightersMaxDuration = 14f;
+    [Tooltip("Fallback cruise bias when no leg weights are configured (0-1).")]
+    [SerializeField] private float cruiseBias = 0.6f;
 
     private HazardPhase _currentPhase = HazardPhase.Cruise;
     private float _phaseTimer;
@@ -199,7 +210,6 @@ public class ChaosSimulator : MonoBehaviour
     {
         var previousPhase = _currentPhase;
         _phaseTimer = 0f;
-        _phaseDuration = Random.Range(phaseMinDuration, phaseMaxDuration);
         
         // Calculate current danger for event interval
         float danger = _legStartDanger;
@@ -225,11 +235,13 @@ public class ChaosSimulator : MonoBehaviour
         if (r < wCruise)
         {
             _currentPhase = HazardPhase.Cruise;
+            _phaseDuration = Random.Range(cruiseMinDuration, cruiseMaxDuration);
             Debug.Log($"[Chaos] Phase transition: {previousPhase} → Cruise (duration: {_phaseDuration:F1}s, weights: C={wCruise:F2} F={wFlak:F2} Fi={wFighters:F2}, roll={r:F2})");
         }
         else if (r < wCruise + wFlak)
         {
             _currentPhase = HazardPhase.Flak;
+            _phaseDuration = Random.Range(flakMinDuration, flakMaxDuration);
             Debug.Log($"[Chaos] Phase transition: {previousPhase} → Flak (duration: {_phaseDuration:F1}s, weights: C={wCruise:F2} F={wFlak:F2} Fi={wFighters:F2}, roll={r:F2})");
             EventLogUI.Instance?.Log("Flak bursts ahead!", Color.red);
             // Pause for phase announcement - major transition
@@ -243,6 +255,7 @@ public class ChaosSimulator : MonoBehaviour
         else
         {
             _currentPhase = HazardPhase.Fighters;
+            _phaseDuration = Random.Range(fightersMinDuration, fightersMaxDuration);
             Debug.Log($"[Chaos] Phase transition: {previousPhase} → Fighters (duration: {_phaseDuration:F1}s, weights: C={wCruise:F2} F={wFlak:F2} Fi={wFighters:F2}, roll={r:F2})");
             EventLogUI.Instance?.Log("Enemy fighters spotted!", Color.red);
             // Pause for phase announcement - major transition
@@ -287,6 +300,7 @@ public class ChaosSimulator : MonoBehaviour
             EventPopupUI.Instance?.Show(msg, Color.red, pause:false);
         }
         
+        OnChaosEvent?.Invoke($"Flak hit {section.Id}");
         Debug.Log($"[Chaos] Flak hits {section.Id} for {damage}, integrity={section.Integrity}, fire={section.OnFire}");
     }
     
@@ -328,6 +342,7 @@ public class ChaosSimulator : MonoBehaviour
             EventPopupUI.Instance?.Show(msg, Color.red, pause:false);
         }
         
+        OnChaosEvent?.Invoke($"Fighter strafe {passes} passes");
         Debug.Log($"[Chaos] Fighters strafe: {passes} passes, {totalDamage} damage to {string.Join(", ", hitSections)}");
     }
     

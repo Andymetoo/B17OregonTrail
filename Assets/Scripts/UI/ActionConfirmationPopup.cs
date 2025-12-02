@@ -21,6 +21,7 @@ public class ActionConfirmationPopup : MonoBehaviour
     [SerializeField] private Button cancelButton;
 
     private Action<bool> onConfirmCallback; // bool parameter: true = use consumable, false = use base
+    private bool wasPausedByPopup = false;
 
     private void Awake()
     {
@@ -78,6 +79,14 @@ public class ActionConfirmationPopup : MonoBehaviour
 
         if (panel != null)
             panel.SetActive(true);
+
+        // Pause gameplay while player chooses
+        wasPausedByPopup = false;
+        if (SimulationTicker.Instance != null && !SimulationTicker.Instance.IsPaused)
+        {
+            SimulationTicker.Instance.Pause();
+            wasPausedByPopup = true;
+        }
     }
 
     private void OnChoice(bool useConsumable)
@@ -97,5 +106,12 @@ public class ActionConfirmationPopup : MonoBehaviour
     {
         if (panel != null)
             panel.SetActive(false);
+
+        // Resume if we paused
+        if (wasPausedByPopup && SimulationTicker.Instance != null)
+        {
+            SimulationTicker.Instance.Resume();
+            wasPausedByPopup = false;
+        }
     }
 }

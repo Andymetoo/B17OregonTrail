@@ -12,9 +12,13 @@ public class SectionView : MonoBehaviour
     public Image image;
 
     [Header("Visual States")]
-    public Color healthyColor = new Color(0f, 0.8f, 0f);      // Green - section is fine
-    public Color damagedColor = new Color(0.9f, 0.8f, 0f);    // Yellow - section is damaged
-    public Color fireColor = new Color(0.9f, 0.2f, 0f);       // Red - section is on fire
+    public Color healthyColor = new Color(0f, 0.8f, 0f);      // Green - full integrity
+    public Color criticalColor = new Color(0.9f, 0f, 0f);     // Red - near destroyed
+    public Color fireColor = new Color(1f, 0.3f, 0f);         // Bright orange - on fire
+    [Tooltip("Section integrity at full health (usually 100)")]
+    public int maxIntegrity = 100;
+    [Tooltip("Section integrity when destroyed (usually 0)")]
+    public int minIntegrity = 0;
 
     void Update()
     {
@@ -23,12 +27,16 @@ public class SectionView : MonoBehaviour
         var section = PlaneManager.Instance.GetSection(sectionId);
         if (section == null) return;
 
-        // Priority: Fire > Damage > Healthy
+        // Priority: Fire overrides everything, then gradient damage tint
         if (section.OnFire)
+        {
             image.color = fireColor;
-        else if (section.Integrity < 100)
-            image.color = damagedColor;
+        }
         else
-            image.color = healthyColor;
+        {
+            // Gradient from healthy (green) at max integrity to critical (red) at min integrity
+            float integrityFraction = Mathf.InverseLerp(minIntegrity, maxIntegrity, section.Integrity);
+            image.color = Color.Lerp(criticalColor, healthyColor, integrityFraction);
+        }
     }
 }

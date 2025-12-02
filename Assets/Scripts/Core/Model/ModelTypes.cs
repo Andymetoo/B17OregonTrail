@@ -14,6 +14,10 @@ public class CrewMember {
 
     public float InjuryTimer; // seconds until next injury stage or death
     
+    // --- STATION ASSIGNMENT ---
+    public StationType DefaultStation = StationType.None;  // Station this crew is assigned to by default
+    public StationType CurrentStation = StationType.None;  // Station they are currently occupying (None if not at a station)
+    
     // --- VISUAL & MOVEMENT ---
     public Vector2 HomePosition;      // Where this crew's station is located on screen
     public Vector2 CurrentPosition;   // Current screen position (for movement lerp)
@@ -135,7 +139,8 @@ public enum ActionType {
     ExtinguishFire,
     TreatInjury,
     Repair,
-    ManStation
+    ManStation,
+    OccupyStation  // Move to and occupy an unmanned station
 }
 
 public enum SystemType {
@@ -160,3 +165,44 @@ public enum SpecialState {
     Leaking,
     Jammed
 }
+
+/// <summary>
+/// Defines all operable crew stations on the B-17.
+/// These are positions where crew can be assigned to perform specific duties.
+/// </summary>
+public enum StationType {
+    // Combat Stations (guns)
+    TopTurret,
+    BallTurret,
+    LeftWaistGun,
+    RightWaistGun,
+    TailGun,
+    
+    // Flight Deck
+    Pilot,
+    CoPilot,
+    
+    // Specialized Positions (Navigator & Bombardier each operate a nose gun in B-17F)
+    Navigator,
+    RadioOperator,
+    Bombardier,
+    
+    // Non-Station (for crew without assigned posts)
+    None
+}
+
+/// <summary>
+/// Tracks the state of a single crew station.
+/// </summary>
+[Serializable]
+public class StationState {
+    public StationType Type;
+    public string StationId;         // e.g. "TailGun", "Pilot" - matches station IDs in scene
+    public string SectionId;         // Which plane section this station is in
+    public string OccupiedByCrewId;  // Crew member ID currently manning this station, or null if empty
+    public bool IsOperational;       // False if station is destroyed/inoperable
+    
+    public bool IsOccupied => !string.IsNullOrEmpty(OccupiedByCrewId);
+    public bool IsAvailable => IsOperational && !IsOccupied;
+}
+
