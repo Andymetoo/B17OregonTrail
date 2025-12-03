@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class PlaneManager : MonoBehaviour
@@ -25,6 +26,14 @@ public class PlaneManager : MonoBehaviour
     public float baseCruiseSpeedMph = 180f;
     [Tooltip("Minimum cruise speed when all engines are destroyed.")]
     public float minCruiseSpeedMph = 60f;
+    
+    [Header("Altitude & Descent")]
+    [Tooltip("Current altitude in feet.")]
+    public float currentAltitudeFeet = 25000f;
+    [Tooltip("Altitude lost per second when >2 engines destroyed (feet/sec).")]
+    public float descentRateFeetPerSecond = 50f;
+    [Tooltip("Minimum safe altitude - below this triggers critical warnings.")]
+    public float minimumSafeAltitudeFeet = 5000f;
 
     // Simple fire damage tuning
     [Header("Fire Settings")]
@@ -49,6 +58,9 @@ public class PlaneManager : MonoBehaviour
     public event Action<PlaneSectionState> OnFireExtinguished;
 
     public event Action<PlaneSystemState> OnSystemStatusChanged;
+    public event Action<PlaneSystemState> OnEngineFireStarted;      // Engine-specific fire events
+    public event Action<PlaneSystemState> OnEngineFireExtinguished;
+    public event Action<PlaneSystemState> OnEngineDamaged;
 
     private void Awake()
     {
@@ -59,37 +71,94 @@ public class PlaneManager : MonoBehaviour
         }
 
         Instance = this;
+        
+        // Initialize B-17 engines if not already set up
+        InitializeEngines();
+    }
+    
+    /// <summary>
+    /// Initialize the four engines of the B-17.
+    /// Called during Awake to ensure engines exist.
+    /// </summary>
+    private void InitializeEngines()
+    {
+        // Only initialize if no engines exist
+        if (Systems.Any(s => s.Type == SystemType.Engine)) return;
+        
+        // B-17 has 4 engines: 2 on each wing (outer left, inner left, inner right, outer right)
+        string[] engineIds = { "Engine1", "Engine2", "Engine3", "Engine4" };
+        string[] engineSections = { "LeftWing", "LeftWing", "RightWing", "RightWing" };
+        
+        for (int i = 0; i < 4; i++)
+        {
+            var engine = new PlaneSystemState
+            {
+                Id = engineIds[i],
+                Type = SystemType.Engine,
+                Status = SystemStatus.Operational,
+                Special = SpecialState.None,
+                SectionId = engineSections[i],
+                Integrity = 100,
+                OnFire = false,
+                IsFeathered = false
+            };
+            Systems.Add(engine);
+            Debug.Log($"[PlaneManager] Initialized {engine.Id} in {engine.SectionId}");
+        }
     }
 
     /// <summary>
     /// Current dynamic cruise speed based on operational engines.
+    /// Accounts for: Operational (100%), Damaged (75%), Destroyed/Feathered (0%).
     /// </summary>
     public float CurrentCruiseSpeedMph
     {
         get
         {
-            int engineCount = 0; int operational = 0;
+            int engineCount = 0;
+            float totalPower = 0f;
+            
             foreach (var sys in Systems)
             {
                 if (sys.Type == SystemType.Engine)
                 {
                     engineCount++;
-                    if (sys.Status == SystemStatus.Operational) operational++;
+                    
+                    // Feathered or destroyed engines provide no power
+                    if (sys.IsFeathered || sys.Status == SystemStatus.Destroyed || sys.Integrity <= 0)
+                    {
+                        // 0% power
+                    }
+                    // Damaged engines provide reduced power
+                    else if (sys.Status == SystemStatus.Damaged)
+                    {
+                        totalPower += 0.75f; // 75% power
+                    }
+                    // Operational engines provide full power
+                    else if (sys.Status == SystemStatus.Operational)
+                    {
+                        totalPower += 1.0f; // 100% power
+                    }
                 }
             }
+            
             if (engineCount == 0) return baseCruiseSpeedMph;
-            float fraction = (float)operational / engineCount;
+            
+            float fraction = totalPower / engineCount;
             return Mathf.Lerp(minCruiseSpeedMph, baseCruiseSpeedMph, fraction);
         }
     }
 
     /// <summary>
     /// Called by GameStateManager once per simulation tick.
-    /// Handles fire damage and fire spread mechanics.
+    /// Handles fire damage and fire spread mechanics for both sections and engines.
+    /// Also handles altitude descent when engines are lost.
     /// </summary>
     public void Tick(float deltaTime)
     {
         TickFires(deltaTime);
+        TickEngines(deltaTime);
+        TickAltitude(deltaTime);
     }
 
     /// <summary>
@@ -222,15 +291,31 @@ public class PlaneManager : MonoBehaviour
     /// <summary>
     /// Extinguish fire in a section (called by crew actions later).
     /// </summary>
-    public bool TryExtinguishFire(string sectionId)
+    /// <summary>
+    /// Attempt to extinguish a fire on a section or engine.
+    /// Checks both sections and engines by ID.
+    /// </summary>
+    public bool TryExtinguishFire(string targetId)
     {
-        var section = GetSection(sectionId);
-        if (section == null) return false;
-        if (!section.OnFire) return false;
-
-        section.OnFire = false;
-        OnFireExtinguished?.Invoke(section);
-        return true;
+        // Try section first
+        var section = GetSection(targetId);
+        if (section != null)
+        {
+            if (!section.OnFire) return false;
+            section.OnFire = false;
+            section.FireDamageAccumulator = 0f;
+            OnFireExtinguished?.Invoke(section);
+            return true;
+        }
+        
+        // Try engine
+        var engine = GetEngine(targetId);
+        if (engine != null)
+        {
+            return TryExtinguishEngineFire(targetId);
+        }
+        
+        return false;
     }
 
     // ------------------------------------------------------------------
@@ -494,5 +579,244 @@ public class PlaneManager : MonoBehaviour
         // If you have an event, raise it here, e.g.:
         // OnSectionStateChanged?.Invoke(section);
     }
+    
+    // ================================
+    // ENGINE SYSTEMS
+    // ================================
+    
+    /// <summary>
+    /// Get an engine by ID.
+    /// </summary>
+    public PlaneSystemState GetEngine(string engineId)
+    {
+        return Systems.FirstOrDefault(s => s.Type == SystemType.Engine && s.Id == engineId);
+    }
+    
+    /// <summary>
+    /// Process engine fires (damage over time).
+    /// </summary>
+    private void TickEngines(float deltaTime)
+    {
+        foreach (var engine in Systems.Where(s => s.Type == SystemType.Engine))
+        {
+            if (!engine.OnFire) continue;
+            
+            int oldIntegrity = engine.Integrity;
+            
+            // Accumulate fire damage
+            engine.FireDamageAccumulator += fireDamagePerSecond * deltaTime;
+            
+            // When accumulated >= 1, roll chance to apply
+            if (engine.FireDamageAccumulator >= 1f)
+            {
+                if (UnityEngine.Random.value < fireDamageChancePerSecond)
+                {
+                    int damage = Mathf.FloorToInt(engine.FireDamageAccumulator);
+                    engine.FireDamageAccumulator -= damage;
+                    
+                    engine.Integrity = Mathf.Max(0, engine.Integrity - damage);
+                    
+                    // Update status based on integrity
+                    UpdateEngineStatus(engine);
+                    
+                    if (engine.Integrity != oldIntegrity)
+                    {
+                        // Calculate old and new 10-point thresholds
+                        int oldThreshold = (oldIntegrity / 10) * 10;
+                        int newThreshold = (engine.Integrity / 10) * 10;
+                        
+                        // Log when crossing DOWN through a 10-point threshold
+                        bool crossedThreshold = oldThreshold > newThreshold;
+                        bool isDestroyed = engine.Integrity <= 0;
+                        
+                        if (crossedThreshold || isDestroyed)
+                        {
+                            engine.LastFireDamageThreshold = newThreshold;
+                            OnEngineDamaged?.Invoke(engine);
+                            EventLogUI.Instance?.Log($"Fire damaged {engine.Id}: {engine.Integrity}%", Color.red);
+                            Debug.Log($"[Plane] Fire damaged {engine.Id}: {oldIntegrity} -> {engine.Integrity}");
+                        }
+                        
+                        if (isDestroyed)
+                        {
+                            EventLogUI.Instance?.Log($"{engine.Id} destroyed!", new Color(0.8f, 0f, 0f));
+                        }
+                    }
+                }
+                else
+                {
+                    // Chance failed, reset accumulator
+                    engine.FireDamageAccumulator = 0f;
+                }
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Update engine status based on integrity level.
+    /// 100-75: Operational, 74-1: Damaged, 0: Destroyed
+    /// </summary>
+    private void UpdateEngineStatus(PlaneSystemState engine)
+    {
+        SystemStatus oldStatus = engine.Status;
+        
+        if (engine.Integrity <= 0)
+        {
+            engine.Status = SystemStatus.Destroyed;
+        }
+        else if (engine.Integrity < 75)
+        {
+            engine.Status = SystemStatus.Damaged;
+        }
+        else
+        {
+            engine.Status = SystemStatus.Operational;
+        }
+        
+        if (oldStatus != engine.Status)
+        {
+            OnSystemStatusChanged?.Invoke(engine);
+            Debug.Log($"[Plane] {engine.Id} status changed: {oldStatus} -> {engine.Status}");
+        }
+    }
+    
+    /// <summary>
+    /// Apply damage to an engine (from combat hits).
+    /// </summary>
+    public void ApplyEngineHit(string engineId, int damage, float fireChance = 0f)
+    {
+        var engine = GetEngine(engineId);
+        if (engine == null)
+        {
+            Debug.LogWarning($"[Plane] ApplyEngineHit: Engine {engineId} not found");
+            return;
+        }
+        
+        int oldIntegrity = engine.Integrity;
+        engine.Integrity = Mathf.Max(0, engine.Integrity - damage);
+        
+        UpdateEngineStatus(engine);
+        
+        if (engine.Integrity != oldIntegrity)
+        {
+            OnEngineDamaged?.Invoke(engine);
+            EventLogUI.Instance?.Log($"{engine.Id} hit! Integrity: {engine.Integrity}%", new Color(1f, 0.4f, 0f));
+            Debug.Log($"[Plane] {engine.Id} hit for {damage} damage: {oldIntegrity} -> {engine.Integrity}");
+        }
+        
+        // Roll for fire
+        if (!engine.OnFire && fireChance > 0f && UnityEngine.Random.value < fireChance)
+        {
+            StartEngineFire(engine);
+        }
+    }
+    
+    /// <summary>
+    /// Start a fire on an engine.
+    /// </summary>
+    public void StartEngineFire(PlaneSystemState engine)
+    {
+        if (engine.OnFire) return; // Already on fire
+        
+        engine.OnFire = true;
+        engine.FireDamageAccumulator = 0f;
+        engine.LastFireDamageThreshold = (engine.Integrity / 10) * 10;
+        
+        OnEngineFireStarted?.Invoke(engine);
+        EventLogUI.Instance?.Log($"{engine.Id} is on fire!", new Color(1f, 0.3f, 0f));
+        Debug.Log($"[Plane] Fire started on {engine.Id}");
+    }
+    
+    /// <summary>
+    /// Attempt to extinguish an engine fire.
+    /// </summary>
+    public bool TryExtinguishEngineFire(string engineId)
+    {
+        var engine = GetEngine(engineId);
+        if (engine == null)
+        {
+            Debug.LogWarning($"[Plane] TryExtinguishEngineFire: Engine {engineId} not found");
+            return false;
+        }
+        
+        if (!engine.OnFire)
+        {
+            Debug.Log($"[Plane] {engineId} is not on fire");
+            return false;
+        }
+        
+        engine.OnFire = false;
+        engine.FireDamageAccumulator = 0f;
+        
+        OnEngineFireExtinguished?.Invoke(engine);
+        EventLogUI.Instance?.Log($"{engine.Id} fire extinguished.", Color.cyan);
+        Debug.Log($"[Plane] Fire extinguished on {engine.Id}");
+        
+        return true;
+    }
+    
+    /// <summary>
+    /// Feather an engine (stop it to prevent drag and further damage).
+    /// </summary>
+    public void FeatherEngine(string engineId)
+    {
+        var engine = GetEngine(engineId);
+        if (engine == null)
+        {
+            Debug.LogWarning($"[Plane] FeatherEngine: Engine {engineId} not found");
+            return;
+        }
+        
+        if (engine.IsFeathered)
+        {
+            Debug.Log($"[Plane] {engineId} is already feathered");
+            return;
+        }
+        
+        engine.IsFeathered = true;
+        OnSystemStatusChanged?.Invoke(engine);
+        EventLogUI.Instance?.Log($"{engine.Id} feathered.", Color.yellow);
+        Debug.Log($"[Plane] {engine.Id} feathered");
+    }
+    
+    /// <summary>
+    /// Handle altitude descent when too many engines are destroyed.
+    /// Plane descends when >2 engines are destroyed or feathered.
+    /// </summary>
+    private void TickAltitude(float deltaTime)
+    {
+        // Count operational engines (not destroyed, not feathered)
+        int operationalEngines = 0;
+        foreach (var engine in Systems.Where(s => s.Type == SystemType.Engine))
+        {
+            if (!engine.IsFeathered && engine.Status != SystemStatus.Destroyed && engine.Integrity > 0)
+            {
+                operationalEngines++;
+            }
+        }
+        
+        // Descent when 2 or fewer operational engines (need at least 3 to maintain altitude)
+        if (operationalEngines <= 2)
+        {
+            float oldAltitude = currentAltitudeFeet;
+            currentAltitudeFeet -= descentRateFeetPerSecond * deltaTime;
+            currentAltitudeFeet = Mathf.Max(0f, currentAltitudeFeet);
+            
+            // Log altitude warnings at key thresholds
+            if (oldAltitude > minimumSafeAltitudeFeet && currentAltitudeFeet <= minimumSafeAltitudeFeet)
+            {
+                EventLogUI.Instance?.Log($"WARNING: Altitude critical! {Mathf.RoundToInt(currentAltitudeFeet)} feet", new Color(1f, 0.5f, 0f));
+                Debug.LogWarning($"[Plane] Altitude critical: {currentAltitudeFeet:F0} feet, {operationalEngines} operational engines");
+            }
+            
+            if (currentAltitudeFeet <= 0f)
+            {
+                EventLogUI.Instance?.Log("CRASH: Aircraft has hit the ground!", Color.red);
+                Debug.LogError("[Plane] Aircraft crashed - altitude reached 0");
+                // TODO: Trigger crash/mission failure
+            }
+        }
+    }
 
 }
+

@@ -99,6 +99,15 @@ public class PlaneSystemState {
     public SystemStatus Status;
     public SpecialState Special;
     public string SectionId; // where it physically lives
+    
+    // Engine-specific fields
+    public int Integrity = 100;          // 0-100, engines can be damaged like sections
+    public bool OnFire = false;          // Engines can catch fire
+    public bool IsFeathered = false;     // Whether engine has been feathered (stopped to prevent drag/damage)
+    
+    // Fire damage tracking (non-serialized runtime state)
+    [NonSerialized] public float FireDamageAccumulator; // Accumulated damage waiting to be applied
+    [NonSerialized] public int LastFireDamageThreshold;  // Last 10-point threshold logged (90, 80, 70, etc.)
 }
 
 [Serializable]
@@ -150,7 +159,8 @@ public enum ActionType {
     TreatInjury,
     Repair,
     ManStation,
-    OccupyStation  // Move to and occupy an unmanned station
+    OccupyStation,  // Move to and occupy an unmanned station
+    FeatherEngine   // Feather an engine to prevent drag/further damage
 }
 
 public enum SystemType {

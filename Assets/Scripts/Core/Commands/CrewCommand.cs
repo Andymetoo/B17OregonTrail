@@ -184,3 +184,34 @@ public class TreatInjuryCommand : CrewCommand
         crewMgr.TryAssignAction(CrewId, action);
     }
 }
+
+/// <summary>
+/// Order a crew member to feather an engine.
+/// </summary>
+[Serializable]
+public class FeatherEngineCommand : CrewCommand
+{
+    public string EngineId;
+    public float Duration;
+
+    public FeatherEngineCommand(string crewId, string engineId, float duration = 5f)
+        : base(crewId)
+    {
+        EngineId = engineId;
+        Duration = duration;
+    }
+
+    public override void Execute(CrewManager crewMgr, PlaneManager planeMgr)
+    {
+        var action = new CrewAction
+        {
+            Type = ActionType.FeatherEngine,
+            TargetId = EngineId,
+            Duration = Duration,
+            Elapsed = 0f
+        };
+
+        crewMgr.TryAssignAction(CrewId, action);
+    }
+}
+

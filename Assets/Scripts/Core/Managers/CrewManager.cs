@@ -501,6 +501,7 @@ public class CrewManager : MonoBehaviour
                 ActionType.Repair => "complete repairs",
                 ActionType.TreatInjury => "treat the injury",
                 ActionType.OccupyStation => "occupy the station",
+                ActionType.FeatherEngine => "feather the engine",
                 _ => "complete the action"
             };
             
@@ -603,6 +604,13 @@ public class CrewManager : MonoBehaviour
                 EventLogUI.Instance?.Log($"{crew.Name} successfully treated {targetName}.", Color.green);
                 break;
             }
+            
+            case ActionType.FeatherEngine:
+                if (PlaneManager.Instance != null)
+                {
+                    PlaneManager.Instance.FeatherEngine(action.TargetId);
+                }
+                break;
 
             case ActionType.ManStation:
                 crew.CurrentStationId = action.TargetId;

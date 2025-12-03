@@ -35,6 +35,8 @@ public class ChaosSimulator : MonoBehaviour
     [Header("Event Weights (0-1 ranges, scaled by Danger)")]
     [Range(0f,1f)] [SerializeField] private float planeDamageWeightMin = 0.2f;
     [Range(0f,1f)] [SerializeField] private float planeDamageWeightMax = 0.9f;
+    [Range(0f,1f)] [SerializeField] private float engineDamageWeightMin = 0.1f;
+    [Range(0f,1f)] [SerializeField] private float engineDamageWeightMax = 0.4f;
     [Range(0f,1f)] [SerializeField] private float fireWeightMin = 0.1f;
     [Range(0f,1f)] [SerializeField] private float fireWeightMax = 0.7f;
     [Range(0f,1f)] [SerializeField] private float crewInjuryWeightMin = 0.05f;
@@ -43,6 +45,12 @@ public class ChaosSimulator : MonoBehaviour
     [Header("Plane Damage Amount (scaled by Danger)")]
     [SerializeField] private int minDamage = 5;
     [SerializeField] private int maxDamage = 25;
+    
+    [Header("Engine Damage Amount")]
+    [SerializeField] private int minEngineDamage = 10;
+    [SerializeField] private int maxEngineDamage = 35;
+    [Tooltip("Chance for engine hit to start a fire (0-1).")]
+    [Range(0f, 1f)] [SerializeField] private float engineFireChance = 0.3f;
 
     [Header("Injury Severity Weights (0-1 ranges)")]
     [Range(0f,1f)] [SerializeField] private float lightSeverityWeightMin = 0.7f;
@@ -273,66 +281,112 @@ public class ChaosSimulator : MonoBehaviour
     
     private void GenerateFlakEvent(float danger)
     {
-        if (PlaneManager.Instance?.Sections == null || PlaneManager.Instance.Sections.Count == 0) return;
-
-        var healthySections = PlaneManager.Instance.Sections.Where(s => s.Integrity > 0).ToList();
-        if (healthySections.Count == 0) return;
-
-        var section = healthySections[Random.Range(0, healthySections.Count)];
-        int oldIntegrity = section.Integrity;
-        bool wasOnFire = section.OnFire;
+        if (PlaneManager.Instance == null) return;
         
-        float dmgT = CurrentPlaneDamageWeight(danger);
-        int dmgMin = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, Mathf.Clamp01(dmgT * 0.5f)));
-        int dmgMax = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, Mathf.Clamp01(0.5f + dmgT * 0.5f)));
-        int damage = Random.Range(dmgMin, Mathf.Max(dmgMin+1, dmgMax));
-
-        float fireWeight = CurrentFireWeight(danger);
-        float fireChance = Mathf.Lerp(0.05f, 0.6f, fireWeight);
-        PlaneManager.Instance.ApplyHitToSection(section.Id, damage, true, fireChance);
+        // Decide between section hit or engine hit based on engine weight
+        float engineWeight = CurrentEngineDamageWeight(danger);
+        bool hitEngine = Random.value < engineWeight;
         
-        // Destruction notification only - regular damage goes through DamageLogUI
-        if (section.Integrity <= 0 && oldIntegrity > 0)
+        if (hitEngine)
         {
-            EventPopupUI.Instance?.Show($"{section.Id} destroyed!", Color.red, pause:false);
+            // Hit an engine
+            var engines = PlaneManager.Instance.Systems.Where(s => s.Type == SystemType.Engine && s.Integrity > 0).ToList();
+            if (engines.Count > 0)
+            {
+                var engine = engines[Random.Range(0, engines.Count)];
+                int damage = Random.Range(minEngineDamage, maxEngineDamage + 1);
+                float fireChance = engineFireChance * Mathf.Lerp(0.5f, 1.5f, danger);
+                
+                PlaneManager.Instance.ApplyEngineHit(engine.Id, damage, fireChance);
+                OnChaosEvent?.Invoke($"Flak hit {engine.Id}");
+                Debug.Log($"[Chaos] Flak hits {engine.Id} for {damage} damage");
+            }
         }
-        
-        OnChaosEvent?.Invoke($"Flak hit {section.Id}");
-        Debug.Log($"[Chaos] Flak hits {section.Id} for {damage}, integrity={section.Integrity}, fire={section.OnFire}");
+        else
+        {
+            // Hit a section
+            if (PlaneManager.Instance.Sections == null || PlaneManager.Instance.Sections.Count == 0) return;
+            var healthySections = PlaneManager.Instance.Sections.Where(s => s.Integrity > 0).ToList();
+            if (healthySections.Count == 0) return;
+
+            var section = healthySections[Random.Range(0, healthySections.Count)];
+            int oldIntegrity = section.Integrity;
+            
+            float dmgT = CurrentPlaneDamageWeight(danger);
+            int dmgMin = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, Mathf.Clamp01(dmgT * 0.5f)));
+            int dmgMax = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, Mathf.Clamp01(0.5f + dmgT * 0.5f)));
+            int damage = Random.Range(dmgMin, Mathf.Max(dmgMin+1, dmgMax));
+
+            float fireWeight = CurrentFireWeight(danger);
+            float fireChance = Mathf.Lerp(0.05f, 0.6f, fireWeight);
+            PlaneManager.Instance.ApplyHitToSection(section.Id, damage, true, fireChance);
+            
+            // Destruction notification only - regular damage goes through DamageLogUI
+            if (section.Integrity <= 0 && oldIntegrity > 0)
+            {
+                EventPopupUI.Instance?.Show($"{section.Id} destroyed!", Color.red, pause:false);
+            }
+            
+            OnChaosEvent?.Invoke($"Flak hit {section.Id}");
+            Debug.Log($"[Chaos] Flak hits {section.Id} for {damage}, integrity={section.Integrity}, fire={section.OnFire}");
+        }
     }
     
     private void GenerateFighterEvent(float danger)
     {
-        if (PlaneManager.Instance?.Sections == null || PlaneManager.Instance.Sections.Count == 0) return;
+        if (PlaneManager.Instance == null) return;
 
-        // Fighters strafe: multiple lighter hits, lower fire chance
+        // Fighters strafe: multiple lighter hits, can hit sections OR engines
         float dmgW = CurrentPlaneDamageWeight(danger);
+        float engineW = CurrentEngineDamageWeight(danger);
         int passes = Random.Range(1, Random.value < dmgW ? 3 : 2);
         
-        List<string> hitSections = new List<string>();
+        List<string> hitTargets = new List<string>();
         int totalDamage = 0;
         bool anyFires = false;
         
         for (int i = 0; i < passes; i++)
         {
-            var viable = PlaneManager.Instance.Sections.Where(s => s.Integrity > 0).ToList();
-            if (viable.Count == 0) break;
-            var section = viable[Random.Range(0, viable.Count)];
-            bool wasOnFire = section.OnFire;
+            // 50/50 chance between section and engine hit (scaled by engine weight)
+            bool hitEngine = Random.value < (engineW * 1.5f); // Fighters more likely to hit engines
             
-            int dmgMin = Mathf.RoundToInt(Mathf.Lerp(2, minDamage, 0.5f));
-            int dmgMax = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, dmgW));
-            int damage = Random.Range(dmgMin, Mathf.Max(dmgMin+1, dmgMax));
-            float fireChance = Mathf.Lerp(0.05f, 0.25f, CurrentFireWeight(danger) * 0.7f);
-            PlaneManager.Instance.ApplyHitToSection(section.Id, damage, true, fireChance);
-            
-            if (!hitSections.Contains(section.Id)) hitSections.Add(section.Id);
-            totalDamage += damage;
-            if (section.OnFire && !wasOnFire) anyFires = true;
+            if (hitEngine)
+            {
+                var engines = PlaneManager.Instance.Systems.Where(s => s.Type == SystemType.Engine && s.Integrity > 0).ToList();
+                if (engines.Count > 0)
+                {
+                    var engine = engines[Random.Range(0, engines.Count)];
+                    int damage = Random.Range(minEngineDamage / 2, maxEngineDamage / 2 + 1); // Lighter than flak
+                    float fireChance = engineFireChance * 0.6f; // Lower fire chance than flak
+                    
+                    PlaneManager.Instance.ApplyEngineHit(engine.Id, damage, fireChance);
+                    if (!hitTargets.Contains(engine.Id)) hitTargets.Add(engine.Id);
+                    totalDamage += damage;
+                    if (engine.OnFire) anyFires = true;
+                }
+            }
+            else
+            {
+                // Hit section
+                if (PlaneManager.Instance.Sections == null || PlaneManager.Instance.Sections.Count == 0) continue;
+                var viable = PlaneManager.Instance.Sections.Where(s => s.Integrity > 0).ToList();
+                if (viable.Count == 0) break;
+                var section = viable[Random.Range(0, viable.Count)];
+                
+                int dmgMin = Mathf.RoundToInt(Mathf.Lerp(2, minDamage, 0.5f));
+                int dmgMax = Mathf.RoundToInt(Mathf.Lerp(minDamage, maxDamage, dmgW));
+                int damage = Random.Range(dmgMin, Mathf.Max(dmgMin+1, dmgMax));
+                float fireChance = Mathf.Lerp(0.05f, 0.25f, CurrentFireWeight(danger) * 0.7f);
+                PlaneManager.Instance.ApplyHitToSection(section.Id, damage, true, fireChance);
+                
+                if (!hitTargets.Contains(section.Id)) hitTargets.Add(section.Id);
+                totalDamage += damage;
+                if (section.OnFire) anyFires = true;
+            }
         }
         
         OnChaosEvent?.Invoke($"Fighter strafe {passes} passes");
-        Debug.Log($"[Chaos] Fighters strafe: {passes} passes, {totalDamage} damage to {string.Join(", ", hitSections)}");
+        Debug.Log($"[Chaos] Fighters strafe: {passes} passes, {totalDamage} damage to {string.Join(", ", hitTargets)}");
     }
     
     private void GenerateCrewInjuryEvent(float danger)
@@ -400,6 +454,7 @@ public class ChaosSimulator : MonoBehaviour
     // Helpers: weight curves
     // ---------------------------
     private float CurrentPlaneDamageWeight(float danger) => Mathf.Lerp(planeDamageWeightMin, planeDamageWeightMax, Mathf.Clamp01(danger));
+    private float CurrentEngineDamageWeight(float danger) => Mathf.Lerp(engineDamageWeightMin, engineDamageWeightMax, Mathf.Clamp01(danger));
     private float CurrentFireWeight(float danger) => Mathf.Lerp(fireWeightMin, fireWeightMax, Mathf.Clamp01(danger));
     private float CurrentCrewInjuryWeight(float danger) => Mathf.Lerp(crewInjuryWeightMin, crewInjuryWeightMax, Mathf.Clamp01(danger));
 

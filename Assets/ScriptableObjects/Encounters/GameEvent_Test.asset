@@ -16,7 +16,8 @@ MonoBehaviour:
   Title: Test Event
   Description: This is test event 1
   DisplayColor: {r: 1, g: 1, b: 1, a: 1}
+  Weight: 1
   FuelDelta: 0
   RandomSectionDamage: 0
-  FireChance: 0
-  CrewInjuryChance: 0.393
+  FireChance: 0.05
+  CrewInjuryChance: 0
