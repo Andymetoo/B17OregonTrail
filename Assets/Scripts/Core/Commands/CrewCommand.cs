@@ -215,3 +215,28 @@ public class FeatherEngineCommand : CrewCommand
     }
 }
 
+public class RestartEngineCommand : CrewCommand
+{
+    public string EngineId;
+    public float Duration;
+
+    public RestartEngineCommand(string crewId, string engineId, float duration = 8f) : base(crewId)
+    {
+        EngineId = engineId;
+        Duration = duration;
+    }
+
+    public override void Execute(CrewManager crewMgr, PlaneManager planeMgr)
+    {
+        var action = new CrewAction
+        {
+            Type = ActionType.RestartEngine,
+            TargetId = EngineId,
+            Duration = Duration,
+            Elapsed = 0f
+        };
+
+        crewMgr.TryAssignAction(CrewId, action);
+    }
+}
+

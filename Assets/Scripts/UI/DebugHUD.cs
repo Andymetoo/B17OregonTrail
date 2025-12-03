@@ -11,6 +11,7 @@ public class DebugHUD : MonoBehaviour
     public TMPro.TMP_Text timeText;
     public TMPro.TMP_Text fuelText;
     public TMPro.TMP_Text speedText;
+    public TMPro.TMP_Text altitudeText;
     public TMPro.TMP_Text nodeText;
     public TMPro.TMP_Text segmentProgressText;
     public TMPro.TMP_Text legNamesText;
@@ -35,10 +36,11 @@ public class DebugHUD : MonoBehaviour
     public GameObject medicalButton;
     public GameObject cancelActionButton;
     
-    [Header("Debug Features")]
-    [Tooltip("Enable pressing 'P' to start a random fire in a random section.")]
-    public bool enableRandomFireHotkey = false;
-
+    [Header("Engine Action Buttons")]
+    public GameObject extinguishEngineButton;
+    public GameObject featherEngineButton;
+    public GameObject restartEngineButton;
+    
     [Header("Pending Message Display")]
     public float pendingMessageLingerSeconds = 5f;
 
@@ -50,12 +52,6 @@ public class DebugHUD : MonoBehaviour
         UpdateTopBar();
         UpdateCrewPanel();
         UpdateCancelButtonVisibility();
-        
-        // Debug hotkey: P to start random fire
-        if (enableRandomFireHotkey && Input.GetKeyDown(KeyCode.P))
-        {
-            StartRandomFire();
-        }
     }
 
     private void Start()
@@ -96,6 +92,13 @@ public class DebugHUD : MonoBehaviour
             {
                 float mph = PlaneManager.Instance.CurrentCruiseSpeedMph;
                 speedText.text = $"Speed: {mph:0} mph";
+            }
+            
+            // Altitude from PlaneManager
+            if (PlaneManager.Instance != null && altitudeText != null)
+            {
+                float altitude = PlaneManager.Instance.currentAltitudeFeet;
+                altitudeText.text = $"Altitude: {altitude:F0} ft";
             }
 
             string currentNode = string.IsNullOrEmpty(mm.CurrentNodeId) ? "None" : mm.CurrentNodeId;
@@ -158,6 +161,14 @@ public class DebugHUD : MonoBehaviour
         if (!string.IsNullOrEmpty(crewIdToShow))
         {
             ShowCrewInfo(crewIdToShow);
+            return;
+        }
+
+        // Check for inspected engine
+        if (OrdersUIController.Instance != null &&
+            !string.IsNullOrEmpty(OrdersUIController.Instance.LastInspectedEngineId))
+        {
+            ShowEngineInfo(OrdersUIController.Instance.LastInspectedEngineId);
             return;
         }
 
@@ -246,6 +257,33 @@ public class DebugHUD : MonoBehaviour
         
         // Hide action buttons when showing section info
         UpdateActionButtonVisibility(false);
+        UpdateEngineActionButtonVisibility(false);
+    }
+
+    private void ShowEngineInfo(string engineId)
+    {
+        var engine = PlaneManager.Instance?.GetEngine(engineId);
+        if (engine == null)
+        {
+            crewNameText.text = $"Engine: {engineId} (not found)";
+            crewStatusText.text = "";
+            crewStationText.text = "";
+            crewActionText.text = "";
+            UpdateActionButtonVisibility(false);
+            UpdateEngineActionButtonVisibility(false);
+            return;
+        }
+
+        crewNameText.text = $"Engine: {engine.Id}";
+        crewStatusText.text = $"Integrity: {engine.Integrity} ({engine.Status})";
+        crewStationText.text = $"On Fire: {engine.OnFire} | Feathered: {engine.IsFeathered}";
+        crewActionText.text = ""; // No systems display for engines
+        
+        // Hide crew action buttons when showing engine info
+        UpdateActionButtonVisibility(false);
+        
+        // Show contextual engine action buttons
+        UpdateEngineActionButtonVisibility(true);
     }
 
 
@@ -286,6 +324,204 @@ public class DebugHUD : MonoBehaviour
         if (repairButton != null) repairButton.SetActive(visible);
         if (medicalButton != null) medicalButton.SetActive(visible);
     }
+    
+    private void UpdateEngineActionButtonVisibility(bool visible)
+    {
+        if (!visible)
+        {
+            // Hide all engine buttons
+            if (extinguishEngineButton != null) extinguishEngineButton.SetActive(false);
+            if (featherEngineButton != null) featherEngineButton.SetActive(false);
+            if (restartEngineButton != null) restartEngineButton.SetActive(false);
+            return;
+        }
+        
+        // Show buttons contextually based on engine state and pilot/copilot occupancy
+        if (OrdersUIController.Instance == null || PlaneManager.Instance == null)
+            return;
+            
+        string engineId = OrdersUIController.Instance.LastInspectedEngineId;
+        var engine = PlaneManager.Instance.GetEngine(engineId);
+        if (engine == null) return;
+        
+        // Check if pilot or copilot is occupied
+        bool pilotPresent = IsPilotOrCopilotOccupied();
+        
+        // Debug logging
+        Debug.Log($"[DebugHUD] Engine {engine.Id}: OnFire={engine.OnFire}, Feathered={engine.IsFeathered}, Status={engine.Status}, Pilot={pilotPresent}");
+        
+        // Extinguish button: ONLY show if engine is on fire
+        if (extinguishEngineButton != null)
+        {
+            bool showExtinguish = engine.OnFire;
+            extinguishEngineButton.SetActive(showExtinguish);
+            
+            // Gray out if no pilot
+            var button = extinguishEngineButton.GetComponent<Button>();
+            if (button != null) button.interactable = pilotPresent;
+            
+            Debug.Log($"[DebugHUD] Extinguish button: show={showExtinguish}, interactable={pilotPresent}");
+        }
+        
+        // Feather button: Only show if engine is damaged/critical but NOT destroyed and NOT on fire
+        // Purpose: Shut down a damaged engine to prevent further damage/explosion
+        if (featherEngineButton != null)
+        {
+            bool isDamagedButRunning = !engine.IsFeathered && !engine.OnFire && 
+                                        engine.Status != SystemStatus.Destroyed && 
+                                        engine.Integrity < 75; // Only show when damaged
+            featherEngineButton.SetActive(isDamagedButRunning);
+            
+            var button = featherEngineButton.GetComponent<Button>();
+            if (button != null) button.interactable = pilotPresent;
+            
+            Debug.Log($"[DebugHUD] Feather button: show={isDamagedButRunning}, integrity={engine.Integrity}");
+        }
+        
+        // Restart button: ONLY show if engine is feathered (and not destroyed)
+        if (restartEngineButton != null)
+        {
+            bool showRestart = engine.IsFeathered && engine.Status != SystemStatus.Destroyed;
+            restartEngineButton.SetActive(showRestart);
+            
+            var button = restartEngineButton.GetComponent<Button>();
+            if (button != null) button.interactable = pilotPresent;
+            
+            Debug.Log($"[DebugHUD] Restart button: show={showRestart}");
+        }
+    }
+    
+    /// <summary>
+    /// Check if Pilot or CoPilot stations are occupied.
+    /// Engine actions require a pilot to be present.
+    /// </summary>
+    private bool IsPilotOrCopilotOccupied()
+    {
+        if (StationManager.Instance == null)
+        {
+            Debug.LogWarning("[DebugHUD] StationManager.Instance is null!");
+            return false;
+        }
+        
+        // Check if either Pilot or CoPilot station is occupied
+        var pilotStation = StationManager.Instance.GetStation(StationType.Pilot);
+        var copilotStation = StationManager.Instance.GetStation(StationType.CoPilot);
+        
+        bool pilotOccupied = pilotStation != null && pilotStation.IsOccupied;
+        bool copilotOccupied = copilotStation != null && copilotStation.IsOccupied;
+        
+        Debug.Log($"[DebugHUD] Pilot station: {(pilotStation != null ? $"found, occupied={pilotOccupied}, crewId={pilotStation.OccupiedByCrewId}" : "NOT FOUND")}");
+        Debug.Log($"[DebugHUD] Copilot station: {(copilotStation != null ? $"found, occupied={copilotOccupied}, crewId={copilotStation.OccupiedByCrewId}" : "NOT FOUND")}");
+        
+        bool result = pilotOccupied || copilotOccupied;
+        Debug.Log($"[DebugHUD] IsPilotOrCopilotOccupied = {result}");
+        
+        return result;
+    }
+    
+    // Engine action button callbacks
+    // These auto-select pilot/copilot and execute on the currently inspected engine
+    public void OnExtinguishEngineButton()
+    {
+        Debug.Log("[DebugHUD] OnExtinguishEngineButton() CALLED!");
+        ExecuteEngineAction(PendingOrderType.ExtinguishFire);
+    }
+    
+    public void OnFeatherEngineButton()
+    {
+        Debug.Log("[DebugHUD] OnFeatherEngineButton() CALLED!");
+        ExecuteEngineAction(PendingOrderType.FeatherEngine);
+    }
+    
+    public void OnRestartEngineButton()
+    {
+        Debug.Log("[DebugHUD] OnRestartEngineButton() CALLED!");
+        ExecuteEngineAction(PendingOrderType.RestartEngine);
+    }
+    
+    /// <summary>
+    /// Execute an engine action with auto-selected pilot/copilot on the inspected engine.
+    /// </summary>
+    private void ExecuteEngineAction(PendingOrderType actionType)
+    {
+        if (OrdersUIController.Instance == null || CrewCommandProcessor.Instance == null)
+            return;
+            
+        // Get the inspected engine
+        string engineId = OrdersUIController.Instance.LastInspectedEngineId;
+        if (string.IsNullOrEmpty(engineId))
+        {
+            Debug.LogWarning("[DebugHUD] No engine selected for action.");
+            return;
+        }
+        
+        // Auto-select pilot or copilot (cascade: pilot first, then copilot)
+        string pilotCrewId = GetPilotOrCopilotCrewId();
+        if (string.IsNullOrEmpty(pilotCrewId))
+        {
+            Debug.LogWarning("[DebugHUD] No pilot or copilot available for engine action.");
+            EventLogUI.Instance?.Log("Engine actions require a pilot or copilot to be present.", Color.red);
+            return;
+        }
+        
+        // Create and enqueue the command directly
+        CrewCommand cmd = null;
+        switch (actionType)
+        {
+            case PendingOrderType.ExtinguishFire:
+                cmd = new ExtinguishFireCommand(pilotCrewId, engineId, 8f, 0.7f, useConsumable: false);
+                break;
+            case PendingOrderType.FeatherEngine:
+                cmd = new FeatherEngineCommand(pilotCrewId, engineId, 5f);
+                break;
+            case PendingOrderType.RestartEngine:
+                cmd = new RestartEngineCommand(pilotCrewId, engineId, 8f);
+                break;
+        }
+        
+        if (cmd != null)
+        {
+            Debug.Log($"[DebugHUD] Enqueueing command: {actionType} for crew {pilotCrewId} on {engineId}");
+            CrewCommandProcessor.Instance.Enqueue(cmd);
+            var crew = CrewManager.Instance?.GetCrewById(pilotCrewId);
+            string crewName = crew != null ? crew.Name : pilotCrewId;
+            Debug.Log($"[DebugHUD] Crew found: {crewName}, Current Station: {crew?.CurrentStation}, Current Action: {crew?.CurrentAction?.Type}");
+            string actionText = actionType switch
+            {
+                PendingOrderType.ExtinguishFire => $"extinguishing fire on {engineId}",
+                PendingOrderType.FeatherEngine => $"feathering {engineId}",
+                PendingOrderType.RestartEngine => $"restarting {engineId}",
+                _ => $"performing action on {engineId}"
+            };
+            EventLogUI.Instance?.Log($"{crewName} is {actionText}", Color.cyan);
+            Debug.Log($"[DebugHUD] {crewName} executing {actionType} on {engineId}");
+        }
+    }
+    
+    /// <summary>
+    /// Get crew ID of pilot (first priority) or copilot (second priority).
+    /// Returns null if neither station is occupied.
+    /// </summary>
+    private string GetPilotOrCopilotCrewId()
+    {
+        if (StationManager.Instance == null) return null;
+        
+        // Try pilot first
+        var pilot = StationManager.Instance.GetStationOccupant(StationType.Pilot);
+        if (pilot != null)
+        {
+            return pilot.Id;
+        }
+        
+        // Fall back to copilot
+        var copilot = StationManager.Instance.GetStationOccupant(StationType.CoPilot);
+        if (copilot != null)
+        {
+            return copilot.Id;
+        }
+        
+        return null;
+    }
 
     private void UpdateCancelButtonVisibility()
     {
@@ -299,37 +535,6 @@ public class DebugHUD : MonoBehaviour
     {
         OrdersUIController.Instance?.CancelPendingAction();
         UpdateCancelButtonVisibility();
-    }
-    
-    /// <summary>
-    /// Debug feature: Start a fire in a random section (hotkey: P)
-    /// </summary>
-    private void StartRandomFire()
-    {
-        if (PlaneManager.Instance == null || PlaneManager.Instance.Sections == null || PlaneManager.Instance.Sections.Count == 0)
-        {
-            Debug.LogWarning("[DebugHUD] Cannot start fire - no sections available");
-            return;
-        }
-        
-        // Get all sections that aren't already on fire and aren't destroyed
-        var validSections = PlaneManager.Instance.Sections
-            .Where(s => !s.OnFire && s.Integrity > 0)
-            .ToList();
-            
-        if (validSections.Count == 0)
-        {
-            Debug.LogWarning("[DebugHUD] Cannot start fire - all sections are already burning or destroyed!");
-            return;
-        }
-        
-        // Pick random section
-        var section = validSections[Random.Range(0, validSections.Count)];
-        
-        // Start fire using PlaneManager helper (properly triggers event)
-        PlaneManager.Instance.StartFire(section.Id);
-        
-        Debug.Log($"[DebugHUD] Started fire in {section.Id}");
     }
 }
 

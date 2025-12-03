@@ -160,7 +160,8 @@ public enum ActionType {
     Repair,
     ManStation,
     OccupyStation,  // Move to and occupy an unmanned station
-    FeatherEngine   // Feather an engine to prevent drag/further damage
+    FeatherEngine,  // Feather an engine to prevent drag/further damage
+    RestartEngine   // Attempt to restart a feathered engine
 }
 
 public enum SystemType {
@@ -168,7 +169,10 @@ public enum SystemType {
     Oxygen,
     Fuel,
     Electrical,
-    Turret,
+    Gun,              // All gun positions (turrets, waist guns, tail gun, nose guns)
+    Radio,            // Radio equipment
+    NavigatorStation, // Navigator's equipment/station
+    Bombsight,        // Bombsight equipment
     LandingGear,
     Hydraulics
 }

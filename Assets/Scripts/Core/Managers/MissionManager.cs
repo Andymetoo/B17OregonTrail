@@ -16,11 +16,10 @@ public class MissionManager : MonoBehaviour
     [Tooltip("Id of the node that represents the bomb target.")]
     public string bombTargetNodeId;
 
-    [Header("Fuel")]
-    [Tooltip("Starting fuel amount for the mission.")]
-    public float startingFuel = 100f;
-
-    public float FuelRemaining { get; private set; }
+    /// <summary>
+    /// Fuel remaining - now sourced from PlaneManager.
+    /// </summary>
+    public float FuelRemaining => PlaneManager.Instance != null ? PlaneManager.Instance.FuelRemaining : 0f;
 
     /// <summary>
     /// Id of the node the plane is currently at.
@@ -124,9 +123,8 @@ public class MissionManager : MonoBehaviour
 
     private void InitializeMissionState()
     {
-        FuelRemaining = startingFuel;
-        OnFuelChanged?.Invoke(FuelRemaining);
-
+        // Fuel is now managed by PlaneManager
+        
         if (string.IsNullOrEmpty(startNodeId))
         {
             // Fall back to first node if start not set.
@@ -226,15 +224,12 @@ public class MissionManager : MonoBehaviour
     }
 
     // Adjust fuel and notify interested systems (used by GameEvent effects)
+    // Now delegates to PlaneManager
     public void AdjustFuel(float delta)
     {
-        FuelRemaining = Mathf.Max(0f, FuelRemaining + delta);
-        OnFuelChanged?.Invoke(FuelRemaining);
-        var log = EventLogUI.Instance ?? FindObjectOfType<EventLogUI>();
-        if (log != null && Math.Abs(delta) > 0.001f)
+        if (PlaneManager.Instance != null)
         {
-            string sign = delta >= 0f ? "+" : "";
-            log.Log($"Fuel {sign}{delta:0} (Remaining: {FuelRemaining:0})", Color.yellow);
+            PlaneManager.Instance.AdjustFuel(delta);
         }
     }
 
@@ -326,12 +321,8 @@ public class MissionManager : MonoBehaviour
         SegmentDuration = 0f;
         _segmentDistanceMiles = 0f;
 
-        // Consume fuel based on the node we arrived at
-        if (arrivedNode != null)
-        {
-            FuelRemaining = Mathf.Max(0f, FuelRemaining - arrivedNode.FuelCost);
-            OnFuelChanged?.Invoke(FuelRemaining);
-        }
+        // Fuel is now consumed continuously in PlaneManager.TickFuel() based on engine power
+        // No longer deducting fuel per waypoint
 
         OnSegmentCompleted?.Invoke(arrivedNode);
 

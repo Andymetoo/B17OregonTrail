@@ -6,7 +6,9 @@ public enum PendingOrderType
     Move,
     ExtinguishFire,
     RepairSystem,
-    TreatInjury
+    TreatInjury,
+    FeatherEngine,
+    RestartEngine
 }
 
 /// <summary>
@@ -26,10 +28,12 @@ public class OrdersUIController : MonoBehaviour
     [SerializeField] private PendingOrderType pendingOrder = PendingOrderType.None;
     [SerializeField] private string pendingTargetId;
     [SerializeField] private string lastInspectedSectionId;
+    [SerializeField] private string lastInspectedEngineId;
 
     public string SelectedCrewId => selectedCrewId;
     public PendingOrderType PendingOrder => pendingOrder;
     public string LastInspectedSectionId => lastInspectedSectionId;
+    public string LastInspectedEngineId => lastInspectedEngineId;
 
     // UI message event for pending action updates
     public System.Action<string> OnPendingActionMessage;
@@ -170,6 +174,7 @@ public class OrdersUIController : MonoBehaviour
             // Clear any crew selection when inspecting a section to show section stats
             selectedCrewId = null;
             lastInspectedSectionId = targetId;
+            lastInspectedEngineId = null; // Clear engine inspection
             Debug.Log($"[OrdersUI] Inspecting section: {targetId}");
             return;
         }
@@ -193,6 +198,80 @@ public class OrdersUIController : MonoBehaviour
         Debug.Log($"[OrdersUI] Target selected: {pendingTargetId} for order {pendingOrder}");
 
         TryCommitOrder();
+    }
+    
+    /// <summary>
+    /// Called when player clicks on an engine button.
+    /// If no pending order, inspect the engine. Otherwise, treat as target for engine actions.
+    /// </summary>
+    public void OnEngineClicked(string engineId)
+    {
+        // If we don't have a pending order, treat this as an inspect
+        if (pendingOrder == PendingOrderType.None)
+        {
+            // Clear any crew selection when inspecting an engine
+            selectedCrewId = null;
+            lastInspectedEngineId = engineId;
+            lastInspectedSectionId = null; // Clear section inspection
+            Debug.Log($"[OrdersUI] Inspecting engine: {engineId}");
+            return;
+        }
+
+        // Check if this is an engine-specific action
+        if (pendingOrder == PendingOrderType.ExtinguishFire || 
+            pendingOrder == PendingOrderType.FeatherEngine || 
+            pendingOrder == PendingOrderType.RestartEngine)
+        {
+            if (string.IsNullOrEmpty(selectedCrewId))
+            {
+                Debug.Log("[OrdersUI] No crew selected when engine target clicked.");
+                return;
+            }
+
+            pendingTargetId = engineId;
+            Debug.Log($"[OrdersUI] Engine target selected: {pendingTargetId} for order {pendingOrder}");
+            TryCommitOrder();
+            return;
+        }
+
+        // Not an engine action - ignore
+        Debug.Log($"[OrdersUI] Ignoring engine click for non-engine action: {pendingOrder}");
+    }
+    
+    /// <summary>
+    /// Called when player clicks on a system button (gun, radio, navigator, bombsight).
+    /// Shows system info in DebugHUD or allows repair action.
+    /// </summary>
+    public void OnSystemClicked(string systemId)
+    {
+        // If we don't have a pending order, treat this as an inspect
+        if (pendingOrder == PendingOrderType.None)
+        {
+            // Clear any crew selection when inspecting a system
+            selectedCrewId = null;
+            lastInspectedSectionId = systemId; // Store in section ID (systems use repair flow)
+            lastInspectedEngineId = null; // Clear engine inspection
+            Debug.Log($"[OrdersUI] Inspecting system: {systemId}");
+            return;
+        }
+
+        // Check if this is a repair action
+        if (pendingOrder == PendingOrderType.RepairSystem)
+        {
+            if (string.IsNullOrEmpty(selectedCrewId))
+            {
+                Debug.Log("[OrdersUI] No crew selected when system repair target clicked.");
+                return;
+            }
+
+            pendingTargetId = systemId;
+            Debug.Log($"[OrdersUI] System repair target selected: {pendingTargetId}");
+            TryCommitOrder();
+            return;
+        }
+
+        // Not a system-compatible action - ignore
+        Debug.Log($"[OrdersUI] Ignoring system click for non-system action: {pendingOrder}");
     }
     
     /// <summary>
@@ -288,6 +367,13 @@ public class OrdersUIController : MonoBehaviour
 
         if (string.IsNullOrEmpty(selectedCrewId) || string.IsNullOrEmpty(pendingTargetId))
         {
+            return;
+        }
+
+        // Engine actions (feather/restart) don't use consumables - execute directly
+        if (pendingOrder == PendingOrderType.FeatherEngine || pendingOrder == PendingOrderType.RestartEngine)
+        {
+            ExecuteOrderCommand(useConsumable: false);
             return;
         }
 
@@ -452,6 +538,20 @@ public class OrdersUIController : MonoBehaviour
                 cmd = new TreatInjuryCommand(selectedCrewId, pendingTargetId, duration, successChance, useConsumable);
                 break;
             }
+            
+            case PendingOrderType.FeatherEngine:
+            {
+                float duration = 5f; // Default feather duration
+                cmd = new FeatherEngineCommand(selectedCrewId, pendingTargetId, duration);
+                break;
+            }
+            
+            case PendingOrderType.RestartEngine:
+            {
+                float duration = 8f; // Default restart duration
+                cmd = new RestartEngineCommand(selectedCrewId, pendingTargetId, duration);
+                break;
+            }
         }
 
 
@@ -468,6 +568,8 @@ public class OrdersUIController : MonoBehaviour
                 PendingOrderType.ExtinguishFire => $"extinguishing fire in {pendingTargetId}",
                 PendingOrderType.RepairSystem => $"repairing {pendingTargetId}",
                 PendingOrderType.TreatInjury => $"performing medical on {pendingTargetId}",
+                PendingOrderType.FeatherEngine => $"feathering {pendingTargetId}",
+                PendingOrderType.RestartEngine => $"restarting {pendingTargetId}",
                 _ => $"performing action at {pendingTargetId}"
             };
             OnPendingActionMessage?.Invoke($"{crewName} is {actionText}");

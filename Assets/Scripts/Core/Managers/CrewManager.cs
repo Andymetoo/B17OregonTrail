@@ -502,6 +502,7 @@ public class CrewManager : MonoBehaviour
                 ActionType.TreatInjury => "treat the injury",
                 ActionType.OccupyStation => "occupy the station",
                 ActionType.FeatherEngine => "feather the engine",
+                ActionType.RestartEngine => "restart the engine",
                 _ => "complete the action"
             };
             
@@ -611,6 +612,14 @@ public class CrewManager : MonoBehaviour
                     PlaneManager.Instance.FeatherEngine(action.TargetId);
                 }
                 break;
+                
+            case ActionType.RestartEngine:
+                if (PlaneManager.Instance != null)
+                {
+                    bool success = PlaneManager.Instance.RestartEngine(action.TargetId);
+                    // Success/failure messages are handled in PlaneManager.RestartEngine()
+                }
+                break;
 
             case ActionType.ManStation:
                 crew.CurrentStationId = action.TargetId;
@@ -700,14 +709,38 @@ public class CrewManager : MonoBehaviour
     /// </summary>
     private void InitializeActionMovement(CrewMember crew, CrewAction action)
     {
+        Debug.Log($"[CrewManager] InitializeActionMovement: crew={crew.Id}, action={action.Type}, target={action.TargetId}, currentStation={crew.CurrentStation}");
+        
         action.Phase = ActionPhase.MoveToTarget;
         action.ReturnPosition = crew.HomePosition;
         action.TargetPosition = GetTargetPositionForAction(action);
         action.Waypoints = null;
         action.CurrentWaypointIndex = 0;
         
-        // Handle station vacation logic based on action type
-        if (StationManager.Instance != null && crew.CurrentStation != StationType.None)
+        // Special case: Pilot/CoPilot performing engine actions from their seat
+        bool isEngineActionFromCockpit = false;
+        if (crew.CurrentStation == StationType.Pilot || crew.CurrentStation == StationType.CoPilot)
+        {
+            Debug.Log($"[CrewManager] Crew is at Pilot/CoPilot station, checking for engine action...");
+            // Check if this is an engine-related action
+            if (action.Type == ActionType.ExtinguishFire || action.Type == ActionType.FeatherEngine || action.Type == ActionType.RestartEngine)
+            {
+                Debug.Log($"[CrewManager] Action type is engine-related: {action.Type}");
+                // Check if target is an engine (Engine1, Engine2, Engine3, Engine4)
+                if (action.TargetId != null && action.TargetId.StartsWith("Engine"))
+                {
+                    Debug.Log($"[CrewManager] Target is an engine: {action.TargetId}");
+                    // Pilot/copilot can perform engine actions from their seat without moving
+                    isEngineActionFromCockpit = true;
+                    action.Phase = ActionPhase.Performing; // Skip movement, go straight to performing
+                    action.TargetPosition = crew.CurrentPosition; // Stay at current position
+                    Debug.Log($"[CrewManager] {crew.Id} performing {action.Type} on {action.TargetId} from cockpit station - SKIPPING MOVEMENT");
+                }
+            }
+        }
+        
+        // Handle station vacation logic based on action type (skip if performing from cockpit)
+        if (!isEngineActionFromCockpit && StationManager.Instance != null && crew.CurrentStation != StationType.None)
         {
             if (action.Type == ActionType.Move)
             {
@@ -723,6 +756,12 @@ public class CrewManager : MonoBehaviour
                 StationManager.Instance.VacateStation(crew.CurrentStation, crew.Id);
                 Debug.Log($"[CrewManager] Crew {crew.Id} temporarily vacating station {crew.CurrentStation} for {action.Type} action");
             }
+        }
+        
+        // Skip pathfinding if performing action from cockpit
+        if (isEngineActionFromCockpit)
+        {
+            return;
         }
         
         // For section-based actions, build waypoint path following ordered sections
@@ -923,11 +962,23 @@ public class CrewManager : MonoBehaviour
 
     public bool TryAssignAction(string crewId, CrewAction action)
     {
+        Debug.Log($"[CrewManager] TryAssignAction called: crewId={crewId}, actionType={action?.Type}, targetId={action?.TargetId}");
+        
         var crew = AllCrew.Find(c => c.Id == crewId);
-        if (crew == null) return false;
+        if (crew == null)
+        {
+            Debug.LogWarning($"[CrewManager] TryAssignAction REJECTED: crew not found (crewId={crewId})");
+            return false;
+        }
+        
+        Debug.Log($"[CrewManager] Crew found: {crew.Name}, Status={crew.Status}, CurrentAction={crew.CurrentAction?.Type}");
         
         // Basic validation examples:
-        if (crew.Status == CrewStatus.Dead) return false;
+        if (crew.Status == CrewStatus.Dead)
+        {
+            Debug.LogWarning($"[CrewManager] TryAssignAction REJECTED: crew is dead (crewId={crewId})");
+            return false;
+        }
         // Treat explicit Idle assignment as a request to clear any action
         if (action != null && action.Type == ActionType.Idle)
         {

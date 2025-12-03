@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 public class PlaneManager : MonoBehaviour
 {
@@ -34,6 +35,17 @@ public class PlaneManager : MonoBehaviour
     public float descentRateFeetPerSecond = 50f;
     [Tooltip("Minimum safe altitude - below this triggers critical warnings.")]
     public float minimumSafeAltitudeFeet = 5000f;
+    
+    [Header("Fuel System")]
+    [Tooltip("Maximum fuel capacity in gallons (B-17G: ~2780 gallons).")]
+    public float maxFuelGallons = 2780f;
+    [Tooltip("Starting fuel amount in gallons.")]
+    public float startingFuelGallons = 2780f;
+    [Tooltip("Base fuel consumption rate in gallons per hour at full power.")]
+    public float baseFuelConsumptionPerHour = 200f;
+    
+    public float FuelRemaining { get; private set; }
+    public event Action<float> OnFuelChanged;
 
     // Simple fire damage tuning
     [Header("Fire Settings")]
@@ -74,6 +86,13 @@ public class PlaneManager : MonoBehaviour
         
         // Initialize B-17 engines if not already set up
         InitializeEngines();
+        
+        // Initialize other critical systems (guns, radio, navigator, bombsight)
+        InitializeSystems();
+        
+        // Initialize fuel
+        FuelRemaining = startingFuelGallons;
+        OnFuelChanged?.Invoke(FuelRemaining);
     }
     
     /// <summary>
@@ -105,6 +124,90 @@ public class PlaneManager : MonoBehaviour
             Systems.Add(engine);
             Debug.Log($"[PlaneManager] Initialized {engine.Id} in {engine.SectionId}");
         }
+    }
+    
+    /// <summary>
+    /// Initialize critical systems: guns, radio, navigator station, bombsight.
+    /// Only creates systems if they don't already exist.
+    /// </summary>
+    private void InitializeSystems()
+    {
+        // Skip if systems already exist
+        if (Systems.Any(s => s.Type == SystemType.Gun || s.Type == SystemType.Radio || 
+                             s.Type == SystemType.NavigatorStation || s.Type == SystemType.Bombsight))
+        {
+            return;
+        }
+        
+        // Gun systems - one for each gun station (matches StationType gun positions)
+        var gunSystems = new[]
+        {
+            new { Id = "TopTurret", Section = "TopTurret" },
+            new { Id = "BallTurret", Section = "BallTurret" },
+            new { Id = "LeftWaistGun", Section = "LeftWaist" },
+            new { Id = "RightWaistGun", Section = "RightWaist" },
+            new { Id = "TailGun", Section = "Tail" },
+            new { Id = "NavigatorGun", Section = "NoseNav" },     // Navigator operates left nose gun
+            new { Id = "BombardierGun", Section = "NoseBomb" }     // Bombardier operates right nose gun
+        };
+        
+        foreach (var gun in gunSystems)
+        {
+            var system = new PlaneSystemState
+            {
+                Id = gun.Id,
+                Type = SystemType.Gun,
+                Status = SystemStatus.Operational,
+                Special = SpecialState.None,
+                SectionId = gun.Section,
+                Integrity = 100,
+                OnFire = false
+            };
+            Systems.Add(system);
+            Debug.Log($"[PlaneManager] Initialized gun system {system.Id} in {system.SectionId}");
+        }
+        
+        // Radio system
+        var radio = new PlaneSystemState
+        {
+            Id = "Radio",
+            Type = SystemType.Radio,
+            Status = SystemStatus.Operational,
+            Special = SpecialState.None,
+            SectionId = "RadioRoom", // Radio room section
+            Integrity = 100,
+            OnFire = false
+        };
+        Systems.Add(radio);
+        Debug.Log($"[PlaneManager] Initialized Radio in {radio.SectionId}");
+        
+        // Navigator Station system
+        var navStation = new PlaneSystemState
+        {
+            Id = "NavigatorStation",
+            Type = SystemType.NavigatorStation,
+            Status = SystemStatus.Operational,
+            Special = SpecialState.None,
+            SectionId = "NoseNav", // Navigator's station in nose
+            Integrity = 100,
+            OnFire = false
+        };
+        Systems.Add(navStation);
+        Debug.Log($"[PlaneManager] Initialized NavigatorStation in {navStation.SectionId}");
+        
+        // Bombsight system
+        var bombsight = new PlaneSystemState
+        {
+            Id = "Bombsight",
+            Type = SystemType.Bombsight,
+            Status = SystemStatus.Operational,
+            Special = SpecialState.None,
+            SectionId = "NoseBomb", // Bombardier's station in nose
+            Integrity = 100,
+            OnFire = false
+        };
+        Systems.Add(bombsight);
+        Debug.Log($"[PlaneManager] Initialized Bombsight in {bombsight.SectionId}");
     }
 
     /// <summary>
@@ -159,6 +262,7 @@ public class PlaneManager : MonoBehaviour
         TickFires(deltaTime);
         TickEngines(deltaTime);
         TickAltitude(deltaTime);
+        TickFuel(deltaTime);
     }
 
     /// <summary>
@@ -780,11 +884,82 @@ public class PlaneManager : MonoBehaviour
     }
     
     /// <summary>
+    /// Attempt to restart a feathered engine.
+    /// Success chance based on integrity. Risk of re-starting fire.
+    /// </summary>
+    public bool RestartEngine(string engineId)
+    {
+        var engine = GetEngine(engineId);
+        if (engine == null)
+        {
+            Debug.LogWarning($"[Plane] RestartEngine: Engine {engineId} not found");
+            return false;
+        }
+        
+        if (!engine.IsFeathered)
+        {
+            Debug.Log($"[Plane] {engineId} is not feathered, cannot restart");
+            return false;
+        }
+        
+        if (engine.Status == SystemStatus.Destroyed)
+        {
+            Debug.Log($"[Plane] {engineId} is destroyed, cannot restart");
+            EventLogUI.Instance?.Log($"{engine.Id} is too damaged to restart.", Color.red);
+            return false;
+        }
+        
+        // Success chance based on integrity: 25% base + (integrity * 0.5%)
+        // At 100 integrity: 75% success
+        // At 50 integrity: 50% success
+        // At 25 integrity: 37.5% success
+        float successChance = 0.25f + (engine.Integrity / 100f) * 0.5f;
+        bool success = Random.value < successChance;
+        
+        if (success)
+        {
+            engine.IsFeathered = false;
+            OnSystemStatusChanged?.Invoke(engine);
+            EventLogUI.Instance?.Log($"{engine.Id} successfully restarted!", Color.green);
+            Debug.Log($"[Plane] {engine.Id} restarted successfully");
+            
+            // 15% chance to re-start fire when restarting damaged engine
+            if (engine.Integrity < 75 && Random.value < 0.15f)
+            {
+                StartEngineFire(engine);
+                EventLogUI.Instance?.Log($"{engine.Id} caught fire on restart!", Color.red);
+            }
+            
+            return true;
+        }
+        else
+        {
+            EventLogUI.Instance?.Log($"Failed to restart {engine.Id}.", Color.yellow);
+            Debug.Log($"[Plane] Failed to restart {engine.Id}");
+            
+            // 10% chance to cause additional damage on failed restart
+            if (Random.value < 0.1f)
+            {
+                int damage = Random.Range(5, 15);
+                engine.Integrity = Mathf.Max(0, engine.Integrity - damage);
+                UpdateEngineStatus(engine);
+                EventLogUI.Instance?.Log($"{engine.Id} took {damage} damage from failed restart!", Color.red);
+                Debug.Log($"[Plane] {engine.Id} took {damage} damage from failed restart");
+            }
+            
+            return false;
+        }
+    }
+    
+    /// <summary>
     /// Handle altitude descent when too many engines are destroyed.
-    /// Plane descends when >2 engines are destroyed or feathered.
+    /// Plane descends when >2 engines are destroyed or feathered, or when out of fuel.
     /// </summary>
     private void TickAltitude(float deltaTime)
     {
+        // Check if out of fuel
+        bool outOfFuel = FuelRemaining <= 0f;
+        
         // Count operational engines (not destroyed, not feathered)
         int operationalEngines = 0;
         foreach (var engine in Systems.Where(s => s.Type == SystemType.Engine))
@@ -795,18 +970,35 @@ public class PlaneManager : MonoBehaviour
             }
         }
         
-        // Descent when 2 or fewer operational engines (need at least 3 to maintain altitude)
-        if (operationalEngines <= 2)
+        // Descent when 2 or fewer operational engines OR out of fuel
+        bool shouldDescend = operationalEngines <= 2 || outOfFuel;
+        
+        if (shouldDescend)
         {
             float oldAltitude = currentAltitudeFeet;
-            currentAltitudeFeet -= descentRateFeetPerSecond * deltaTime;
+            
+            // Calculate descent rate
+            float descentRate = descentRateFeetPerSecond;
+            
+            // If out of fuel, apply parabolic descent (accelerates as altitude decreases)
+            if (outOfFuel)
+            {
+                // Parabolic descent: faster as you get closer to ground
+                // At 25000 ft: base descent rate
+                // At 0 ft: 3x descent rate
+                float altitudeFraction = Mathf.Clamp01(currentAltitudeFeet / 25000f);
+                float descentMultiplier = Mathf.Lerp(3f, 1f, altitudeFraction);
+                descentRate *= descentMultiplier;
+            }
+            
+            currentAltitudeFeet -= descentRate * deltaTime;
             currentAltitudeFeet = Mathf.Max(0f, currentAltitudeFeet);
             
             // Log altitude warnings at key thresholds
             if (oldAltitude > minimumSafeAltitudeFeet && currentAltitudeFeet <= minimumSafeAltitudeFeet)
             {
                 EventLogUI.Instance?.Log($"WARNING: Altitude critical! {Mathf.RoundToInt(currentAltitudeFeet)} feet", new Color(1f, 0.5f, 0f));
-                Debug.LogWarning($"[Plane] Altitude critical: {currentAltitudeFeet:F0} feet, {operationalEngines} operational engines");
+                Debug.LogWarning($"[Plane] Altitude critical: {currentAltitudeFeet:F0} feet, {operationalEngines} operational engines, fuel: {FuelRemaining:F1}");
             }
             
             if (currentAltitudeFeet <= 0f)
@@ -815,6 +1007,91 @@ public class PlaneManager : MonoBehaviour
                 Debug.LogError("[Plane] Aircraft crashed - altitude reached 0");
                 // TODO: Trigger crash/mission failure
             }
+        }
+    }
+    
+    /// <summary>
+    /// Consume fuel based on engine power and time.
+    /// Fuel consumption scales with operational engine power.
+    /// </summary>
+    private void TickFuel(float deltaTime)
+    {
+        if (FuelRemaining <= 0f) return;
+        
+        // Calculate current engine power fraction (same as speed calculation)
+        int engineCount = 0;
+        float totalPower = 0f;
+        
+        foreach (var sys in Systems)
+        {
+            if (sys.Type == SystemType.Engine)
+            {
+                engineCount++;
+                
+                // Feathered or destroyed engines consume no fuel
+                if (sys.IsFeathered || sys.Status == SystemStatus.Destroyed || sys.Integrity <= 0)
+                {
+                    // 0% power, 0% fuel consumption
+                }
+                // Damaged engines consume fuel but at reduced rate (75% power)
+                else if (sys.Status == SystemStatus.Damaged)
+                {
+                    totalPower += 0.75f;
+                }
+                // Operational engines consume full fuel
+                else if (sys.Status == SystemStatus.Operational)
+                {
+                    totalPower += 1.0f;
+                }
+            }
+        }
+        
+        if (engineCount == 0) return;
+        
+        // Fuel consumption scales with engine power
+        float powerFraction = totalPower / engineCount;
+        float fuelConsumptionPerSecond = (baseFuelConsumptionPerHour * powerFraction) / 3600f;
+        float fuelConsumed = fuelConsumptionPerSecond * deltaTime;
+        
+        float oldFuel = FuelRemaining;
+        FuelRemaining = Mathf.Max(0f, FuelRemaining - fuelConsumed);
+        OnFuelChanged?.Invoke(FuelRemaining);
+        
+        // Warn when fuel is critical
+        if (oldFuel > 100f && FuelRemaining <= 100f)
+        {
+            EventLogUI.Instance?.Log("WARNING: Fuel critically low!", new Color(1f, 0.5f, 0f));
+            Debug.LogWarning($"[Plane] Fuel critical: {FuelRemaining:F1} gallons remaining");
+        }
+        
+        if (FuelRemaining <= 0f)
+        {
+            EventLogUI.Instance?.Log("OUT OF FUEL! Engines shutting down!", Color.red);
+            Debug.LogError("[Plane] Out of fuel!");
+            // Feather all engines when out of fuel
+            foreach (var engine in Systems.Where(s => s.Type == SystemType.Engine))
+            {
+                if (!engine.IsFeathered)
+                {
+                    engine.IsFeathered = true;
+                    OnSystemStatusChanged?.Invoke(engine);
+                }
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Adjust fuel amount (used by events, refueling, etc).
+    /// </summary>
+    public void AdjustFuel(float delta)
+    {
+        FuelRemaining = Mathf.Clamp(FuelRemaining + delta, 0f, maxFuelGallons);
+        OnFuelChanged?.Invoke(FuelRemaining);
+        
+        if (EventLogUI.Instance != null && Mathf.Abs(delta) > 0.001f)
+        {
+            string sign = delta >= 0f ? "+" : "";
+            EventLogUI.Instance.Log($"Fuel {sign}{delta:0} gallons (Remaining: {FuelRemaining:0})", Color.yellow);
         }
     }
 

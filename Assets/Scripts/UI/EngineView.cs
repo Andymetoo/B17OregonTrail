@@ -1,12 +1,13 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 /// <summary>
 /// Provides visual feedback for engine state by tinting button colors.
 /// Shows integrity level, fire state, and feathered status.
 /// Attach to engine buttons.
 /// </summary>
-public class EngineView : MonoBehaviour
+public class EngineView : MonoBehaviour, IPointerClickHandler
 {
     [Header("Engine Configuration")]
     public string engineId; // "Engine1", "Engine2", "Engine3", "Engine4"
@@ -103,6 +104,17 @@ public class EngineView : MonoBehaviour
                 float fraction = Mathf.InverseLerp(damagedThreshold, maxIntegrity, engine.Integrity);
                 image.color = Color.Lerp(damagedColor, operationalColor, fraction);
             }
+        }
+    }
+    
+    /// <summary>
+    /// Called when engine button is clicked. Notify OrdersUIController.
+    /// </summary>
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (OrdersUIController.Instance != null)
+        {
+            OrdersUIController.Instance.OnEngineClicked(engineId);
         }
     }
 }
