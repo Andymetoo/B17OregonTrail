@@ -81,6 +81,15 @@ public class EventPopupUI : MonoBehaviour
 
     private void Update()
     {
+        // Allow any mouse click to dismiss popup when active
+        if (panel != null && panel.activeSelf)
+        {
+            if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetMouseButtonDown(2))
+            {
+                OnContinueClicked();
+            }
+        }
+        
         if (Input.GetKeyDown(KeyCode.P))
         {
             Debug.Log($"[EventPopupUI Debug] Panel active: {panel.activeSelf}, " +

@@ -10,6 +10,10 @@ public class SectionView : MonoBehaviour
     [Header("Section Configuration")]
     public string sectionId;
     public Image image;
+    
+    [Header("Fire Graphics")]
+    [Tooltip("UI GameObject showing fire graphic - will be enabled/disabled based on section fire state.")]
+    public GameObject fireGraphic;
 
     [Header("Visual States")]
     public Color healthyColor = new Color(0f, 0.8f, 0f);      // Green - full integrity
@@ -44,6 +48,12 @@ public class SectionView : MonoBehaviour
         if (blinkTimer > 0f)
         {
             blinkTimer -= Time.deltaTime;
+        }
+        
+        // Update fire graphic visibility
+        if (fireGraphic != null)
+        {
+            fireGraphic.SetActive(section.OnFire);
         }
 
         // Priority: Blink > Fire > Gradient damage tint

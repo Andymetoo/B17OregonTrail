@@ -112,7 +112,7 @@ public class OrdersUIController : MonoBehaviour
             return;
         }
 
-        // Validate selected crew is Healthy before allowing any pending order
+        // Validate selected crew can perform actions (Healthy or Light injured)
         var crew = CrewManager.Instance?.GetCrewById(selectedCrewId);
         if (crew == null)
         {
@@ -120,13 +120,13 @@ public class OrdersUIController : MonoBehaviour
             return;
         }
 
-        if (crew.Status != CrewStatus.Healthy)
+        if (crew.Status != CrewStatus.Healthy && crew.Status != CrewStatus.Light)
         {
-            Debug.Log($"[OrdersUI] {crew.Name} is {crew.Status} and cannot initiate actions. Select a healthy crew.");
+            Debug.Log($"[OrdersUI] {crew.Name} is {crew.Status} and cannot initiate actions. Too severely injured.");
             // Explicitly clear any pending order request
             pendingOrder = PendingOrderType.None;
             pendingTargetId = null;
-            EventLogUI.Instance?.Log($"{crew.Name} is {crew.Status} and cannot initiate actions.", Color.red);
+            EventLogUI.Instance?.Log($"{crew.Name} is too severely injured to perform actions.", Color.red);
             return;
         }
 
@@ -228,11 +228,11 @@ public class OrdersUIController : MonoBehaviour
         }
         
         // Otherwise, this is a crew selection (not a target)
-        // Only allow selecting healthy crew for giving orders
+        // Allow healthy and lightly injured crew to be selected for orders
         var crew = CrewManager.Instance?.GetCrewById(crewId);
-        if (crew != null && crew.Status != CrewStatus.Healthy)
+        if (crew != null && crew.Status != CrewStatus.Healthy && crew.Status != CrewStatus.Light)
         {
-            Debug.Log($"[OrdersUI] {crew.Name} is injured and cannot be selected to perform actions.");
+            Debug.Log($"[OrdersUI] {crew.Name} is too injured to perform actions (status: {crew.Status}).");
             return;
         }
         
@@ -394,14 +394,18 @@ public class OrdersUIController : MonoBehaviour
         switch (pendingOrder)
         {
             case PendingOrderType.Move:
-                cmd = new MoveCrewCommand(selectedCrewId, pendingTargetId, 4f);
+            {
+                float duration = CrewManager.Instance != null ? CrewManager.Instance.moveActionDuration : 3f;
+                cmd = new MoveCrewCommand(selectedCrewId, pendingTargetId, duration);
                 break;
+            }
 
             case PendingOrderType.ExtinguishFire:
             {
+                float baseDuration = CrewManager.Instance != null ? CrewManager.Instance.extinguishFireActionDuration : 8f;
                 float duration = useConsumable 
                     ? (upgrades != null ? upgrades.GetModifiedFireExtinguisherDuration() : config.fireExtinguisherDuration)
-                    : (upgrades != null ? upgrades.GetModifiedExtinguishDuration() : config.baseExtinguishDuration);
+                    : (upgrades != null ? upgrades.GetModifiedExtinguishDuration() : baseDuration);
                 float successChance = useConsumable 
                     ? config.fireExtinguisherSuccessChance 
                     : (upgrades != null ? upgrades.GetModifiedExtinguishSuccess() : config.baseExtinguishSuccessChance);
@@ -411,9 +415,10 @@ public class OrdersUIController : MonoBehaviour
 
             case PendingOrderType.RepairSystem:
             {
+                float baseDuration = CrewManager.Instance != null ? CrewManager.Instance.repairActionDuration : 10f;
                 float duration = useConsumable 
                     ? (upgrades != null ? upgrades.GetModifiedRepairKitDuration() : config.repairKitDuration)
-                    : (upgrades != null ? upgrades.GetModifiedRepairDuration() : config.baseRepairDuration);
+                    : (upgrades != null ? upgrades.GetModifiedRepairDuration() : baseDuration);
                 float successChance = useConsumable 
                     ? config.repairKitSuccessChance 
                     : (upgrades != null ? upgrades.GetModifiedRepairSuccess() : config.baseRepairSuccessChance);
@@ -437,9 +442,10 @@ public class OrdersUIController : MonoBehaviour
                     OnPendingActionMessage?.Invoke($"{target.Name} is not injured.");
                     return;
                 }
+                float baseDuration = CrewManager.Instance != null ? CrewManager.Instance.medicalActionDuration : 10f;
                 float duration = useConsumable 
                     ? (upgrades != null ? upgrades.GetModifiedMedkitDuration() : config.medkitDuration)
-                    : (upgrades != null ? upgrades.GetModifiedMedicalDuration() : config.baseMedicalDuration);
+                    : (upgrades != null ? upgrades.GetModifiedMedicalDuration() : baseDuration);
                 float successChance = useConsumable 
                     ? config.medkitSuccessChance 
                     : (upgrades != null ? upgrades.GetModifiedMedicalSuccess() : config.baseMedicalSuccessChance);

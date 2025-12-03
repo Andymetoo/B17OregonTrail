@@ -24,6 +24,9 @@ public class CrewMember {
     public Vector2 HomeOffset;        // Optional per-crew offset added to station position
     public float MoveSpeed = 50f;     // Pixels per second movement speed
     public CrewVisualState VisualState = CrewVisualState.IdleAtStation;
+    
+    // --- ACTION STATUS FEEDBACK ---
+    public string ActionStatusText;   // Status message displayed in UI (e.g., "Cannot pass through fire!")
 }
 
 [Serializable]
@@ -83,6 +86,10 @@ public class PlaneSectionState {
     public string Id;        // "Nose", "Cockpit", "LeftWing", etc.
     public int Integrity;    // 0–100 health
     public bool OnFire;
+    
+    // Fire damage tracking (not serialized, runtime only)
+    [NonSerialized] public float FireDamageAccumulator; // Accumulates fractional damage between ticks
+    [NonSerialized] public int LastFireDamageThreshold; // Last 10-point threshold we logged (90, 80, 70, etc.)
 }
 
 [Serializable]

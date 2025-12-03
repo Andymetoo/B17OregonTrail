@@ -120,8 +120,9 @@ public class CrewStatusIndicator : MonoBehaviour
     
     private bool IsCrewUsable(CrewStatus status)
     {
-        // Any injury or incapacitation makes crew unable to perform actions
-        return status == CrewStatus.Healthy;
+        // Healthy and Light injured crew can perform actions (with penalties)
+        // Serious, Critical, Unconscious, and Dead cannot
+        return status == CrewStatus.Healthy || status == CrewStatus.Light;
     }
     
     private void UpdateStatusIndicator(CrewStatus status, CrewAction currentAction)

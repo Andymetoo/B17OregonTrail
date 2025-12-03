@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;      // For Button, Text
@@ -33,6 +34,10 @@ public class DebugHUD : MonoBehaviour
     public GameObject repairButton;
     public GameObject medicalButton;
     public GameObject cancelActionButton;
+    
+    [Header("Debug Features")]
+    [Tooltip("Enable pressing 'P' to start a random fire in a random section.")]
+    public bool enableRandomFireHotkey = false;
 
     [Header("Pending Message Display")]
     public float pendingMessageLingerSeconds = 5f;
@@ -45,6 +50,12 @@ public class DebugHUD : MonoBehaviour
         UpdateTopBar();
         UpdateCrewPanel();
         UpdateCancelButtonVisibility();
+        
+        // Debug hotkey: P to start random fire
+        if (enableRandomFireHotkey && Input.GetKeyDown(KeyCode.P))
+        {
+            StartRandomFire();
+        }
     }
 
     private void Start()
@@ -289,4 +300,36 @@ public class DebugHUD : MonoBehaviour
         OrdersUIController.Instance?.CancelPendingAction();
         UpdateCancelButtonVisibility();
     }
+    
+    /// <summary>
+    /// Debug feature: Start a fire in a random section (hotkey: P)
+    /// </summary>
+    private void StartRandomFire()
+    {
+        if (PlaneManager.Instance == null || PlaneManager.Instance.Sections == null || PlaneManager.Instance.Sections.Count == 0)
+        {
+            Debug.LogWarning("[DebugHUD] Cannot start fire - no sections available");
+            return;
+        }
+        
+        // Get all sections that aren't already on fire and aren't destroyed
+        var validSections = PlaneManager.Instance.Sections
+            .Where(s => !s.OnFire && s.Integrity > 0)
+            .ToList();
+            
+        if (validSections.Count == 0)
+        {
+            Debug.LogWarning("[DebugHUD] Cannot start fire - all sections are already burning or destroyed!");
+            return;
+        }
+        
+        // Pick random section
+        var section = validSections[Random.Range(0, validSections.Count)];
+        
+        // Start fire using PlaneManager helper (properly triggers event)
+        PlaneManager.Instance.StartFire(section.Id);
+        
+        Debug.Log($"[DebugHUD] Started fire in {section.Id}");
+    }
 }
+

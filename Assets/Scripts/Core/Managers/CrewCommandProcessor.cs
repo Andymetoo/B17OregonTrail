@@ -56,10 +56,10 @@ public class CrewCommandProcessor : MonoBehaviour
                 continue;
             }
 
-            if (issuingCrew.Status != CrewStatus.Healthy)
+            if (issuingCrew.Status != CrewStatus.Healthy && issuingCrew.Status != CrewStatus.Light)
             {
                 if (CrewManager.Instance.ShouldTrace(issuingCrew))
-                    Debug.Log($"[Trace] Cmd skipped: {issuingCrew.Name} not healthy");
+                    Debug.Log($"[Trace] Cmd skipped: {issuingCrew.Name} too injured (status: {issuingCrew.Status})");
                 continue;
             }
 
