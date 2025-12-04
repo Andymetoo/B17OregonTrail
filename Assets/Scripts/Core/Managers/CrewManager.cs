@@ -176,10 +176,15 @@ public class CrewManager : MonoBehaviour
     /// </summary>
     public void Tick(float deltaTime)
     {
-        if (!_positionsInitialized) return; // Do not tick movement/actions until positions ready
+        if (!_positionsInitialized)
+        {
+            Debug.LogWarning("[CrewManager] Tick called but positions not initialized yet!");
+            return; // Do not tick movement/actions until positions ready
+        }
         foreach (var crew in AllCrew)
         {
             TickInjuries(crew, deltaTime);
+            TickFireExposure(crew, deltaTime); // Check if crew is in burning section
 
             if (crew.CurrentAction != null)
             {
@@ -203,6 +208,63 @@ public class CrewManager : MonoBehaviour
             {
                 ProgressInjury(crew);
             }
+        }
+    }
+    
+    /// <summary>
+    /// Check if crew is in a burning section and apply fire damage over time.
+    /// Crew trapped in fire take gradual injury damage.
+    /// </summary>
+    private void TickFireExposure(CrewMember crew, float deltaTime)
+    {
+        if (crew.Status == CrewStatus.Dead) return;
+        if (PlaneManager.Instance == null || CrewPositionRegistry.Instance == null) return;
+        
+        // Don't apply fire damage during ExtinguishFire actions (they're actively fighting it)
+        if (crew.CurrentAction != null && crew.CurrentAction.Type == ActionType.ExtinguishFire) return;
+        
+        string currentSectionId = CrewPositionRegistry.Instance.GetNearestSectionIdByPosition(crew.CurrentPosition);
+        var section = PlaneManager.Instance.GetSection(currentSectionId);
+        
+        if (section != null && section.OnFire)
+        {
+            // Crew is in a burning section - apply injury over time
+            const float fireInjuryInterval = 5f; // Injure every 5 seconds
+            
+            if (!crew.FireExposureTimer.HasValue)
+            {
+                crew.FireExposureTimer = 0f;
+            }
+            
+            crew.FireExposureTimer += deltaTime;
+            
+            if (crew.FireExposureTimer >= fireInjuryInterval)
+            {
+                crew.FireExposureTimer -= fireInjuryInterval;
+                
+                // Progress injury if crew is trapped in fire
+                if (crew.Status == CrewStatus.Healthy)
+                {
+                    ApplyInjury(crew.Id, CrewStatus.Light);
+                    EventLogUI.Instance?.Log($"{crew.Name} burned by fire in {currentSectionId}!", new Color(1f, 0.5f, 0f));
+                }
+                else if (crew.Status == CrewStatus.Light)
+                {
+                    ApplyInjury(crew.Id, CrewStatus.Serious);
+                    EventLogUI.Instance?.Log($"{crew.Name} seriously burned in {currentSectionId}!", Color.red);
+                }
+                else
+                {
+                    // Already serious/critical - fire exposure accelerates death
+                    crew.InjuryTimer = Mathf.Max(0f, crew.InjuryTimer - 10f); // Reduce time to next stage
+                    EventLogUI.Instance?.Log($"{crew.Name} critically burned - needs immediate evacuation!", Color.red);
+                }
+            }
+        }
+        else
+        {
+            // Not in fire - reset exposure timer
+            crew.FireExposureTimer = null;
         }
     }
 
@@ -332,6 +394,34 @@ public class CrewManager : MonoBehaviour
                         return;
                     }
                     
+                    // Check if action should repeat (repair/medical/fire until complete)
+                    if (action.RepeatUntilComplete && ShouldRepeatAction(crew, action))
+                    {
+                        // Reset action to repeat
+                        action.Elapsed = 0f;
+                        action.Phase = ActionPhase.Performing; // Stay at location, don't move back
+                        if (verboseLogging && ShouldTrace(crew))
+                            Debug.Log($"[Trace] Repeating action: crew={crew.Id} action={action.Type} target={action.TargetId}");
+                        return; // Continue performing without returning
+                    }
+                    
+                    // Safety check: Don't return to a section that's now on fire
+                    if (PlaneManager.Instance != null && CrewPositionRegistry.Instance != null)
+                    {
+                        string returnSectionId = CrewPositionRegistry.Instance.GetNearestSectionIdByPosition(action.ReturnPosition);
+                        var returnSection = PlaneManager.Instance.GetSection(returnSectionId);
+                        if (returnSection != null && returnSection.OnFire)
+                        {
+                            Debug.LogWarning($"[CrewManager] {crew.Name}'s return section {returnSectionId} is on fire! Action aborted.");
+                            EventLogUI.Instance?.Log($"{crew.Name} cannot return - section on fire! Staying at current location.", Color.red);
+                            
+                            // Keep crew at current safe position, mark action complete
+                            crew.HomePosition = crew.CurrentPosition; // Update home to current safe position
+                            CompleteAction(crew);
+                            return;
+                        }
+                    }
+                    
                     action.Phase = ActionPhase.Returning;
                     action.Elapsed = 0f;
                     crew.VisualState = CrewVisualState.Moving;
@@ -359,6 +449,25 @@ public class CrewManager : MonoBehaviour
                 break;
                 
             case ActionPhase.Returning:
+                // Safety check: Don't enter burning sections during return
+                if (PlaneManager.Instance != null && CrewPositionRegistry.Instance != null)
+                {
+                    string currentSectionId = CrewPositionRegistry.Instance.GetNearestSectionIdByPosition(crew.CurrentPosition);
+                    string returnSectionId = CrewPositionRegistry.Instance.GetNearestSectionIdByPosition(action.ReturnPosition);
+                    var returnSection = PlaneManager.Instance.GetSection(returnSectionId);
+                    
+                    if (returnSection != null && returnSection.OnFire)
+                    {
+                        Debug.LogWarning($"[CrewManager] {crew.Name}'s return path blocked by fire in {returnSectionId}! Staying in {currentSectionId}.");
+                        EventLogUI.Instance?.Log($"{crew.Name} trapped by fire - cannot return!", Color.red);
+                        
+                        // Update home position to current safe location
+                        crew.HomePosition = crew.CurrentPosition;
+                        CompleteAction(crew);
+                        return;
+                    }
+                }
+                
                 // Traverse return waypoints (if any), then final hop to home
                 if (action.ReturnWaypoints != null && action.ReturnWaypoints.Count > 0 && action.ReturnWaypointIndex < action.ReturnWaypoints.Count)
                 {
@@ -644,21 +753,120 @@ public class CrewManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Check if an action should repeat based on whether the target is fully repaired/healed/extinguished.
+    /// </summary>
+    private bool ShouldRepeatAction(CrewMember crew, CrewAction action)
+    {
+        if (PlaneManager.Instance == null) return false;
+        
+        switch (action.Type)
+        {
+            case ActionType.Repair:
+                // Check if system/section is fully repaired
+                var sys = PlaneManager.Instance.GetSystem(action.TargetId);
+                if (sys != null)
+                {
+                    // System needs more repair if integrity < 100 or status is not Operational
+                    if (sys.Integrity < 100 || sys.Status != SystemStatus.Operational)
+                    {
+                        return true;
+                    }
+                }
+                // Check section
+                var section = PlaneManager.Instance.GetSection(sys != null ? sys.SectionId : action.TargetId);
+                if (section != null && section.Integrity < 100)
+                {
+                    return true;
+                }
+                return false;
+                
+            case ActionType.ExtinguishFire:
+                // Check if fire is still burning
+                var fireSection = PlaneManager.Instance.GetSection(action.TargetId);
+                return fireSection != null && fireSection.OnFire;
+                
+            case ActionType.TreatInjury:
+                // Check if patient is fully healed
+                var patient = GetCrewById(action.TargetId);
+                return patient != null && patient.Status != CrewStatus.Healthy;
+                
+            default:
+                return false;
+        }
+    }
+
     private void CancelCurrentAction(CrewMember crew, string reason)
     {
         if (crew.CurrentAction == null) return;
         
         var action = crew.CurrentAction;
         
-        // Return crew to station if they were moving/working
-        crew.CurrentPosition = crew.HomePosition;
-        crew.VisualState = CrewVisualState.IdleAtStation;
+        // Refund consumable if action used one and hasn't completed yet
+        if (action.UsesConsumable && action.Phase != ActionPhase.Returning)
+        {
+            RefundConsumable(action.ConsumableType);
+            EventLogUI.Instance?.Log($"Consumable refunded: {action.ConsumableType}", Color.cyan);
+        }
         
+        // Check if home position is safe (not on fire)
+        string homeSectionId = CrewPositionRegistry.Instance?.GetNearestSectionIdByPosition(crew.HomePosition);
+        var homeSection = PlaneManager.Instance?.GetSection(homeSectionId);
+        
+        if (homeSection != null && homeSection.OnFire)
+        {
+            // Home section is on fire - find nearest safe section
+            string safeSectionId = PlaneManager.Instance.GetNearestSafeAdjacentSection(homeSectionId);
+            if (!string.IsNullOrEmpty(safeSectionId))
+            {
+                Vector2 safePosition = CrewPositionRegistry.Instance.GetSectionPosition(safeSectionId);
+                crew.HomePosition = safePosition;
+                crew.CurrentPosition = safePosition;
+                EventLogUI.Instance?.Log($"{crew.Name} stopped in {safeSectionId} - home section on fire!", new Color(1f, 0.5f, 0f));
+                Debug.Log($"[CrewManager] Cancelled action: {crew.Name} diverted to {safeSectionId} (home section {homeSectionId} on fire)");
+            }
+            else
+            {
+                // No safe section found - stay at current position
+                crew.HomePosition = crew.CurrentPosition;
+                EventLogUI.Instance?.Log($"{crew.Name} has nowhere safe to go!", Color.red);
+                Debug.LogWarning($"[CrewManager] Cancelled action: No safe section found for {crew.Name}");
+            }
+        }
+        else
+        {
+            // Home is safe - return there
+            crew.CurrentPosition = crew.HomePosition;
+        }
+        
+        crew.VisualState = CrewVisualState.IdleAtStation;
         crew.CurrentAction = null;
         OnCrewActionCancelled?.Invoke(crew);
         ReleaseTargetLock(action);
         
         Debug.Log($"[CrewManager] {crew.Name}'s action cancelled: {reason}");
+    }
+    
+    /// <summary>
+    /// Refund a consumable to the plane's supplies.
+    /// </summary>
+    private void RefundConsumable(SupplyType supplyType)
+    {
+        if (SupplyManager.Instance == null) return;
+        
+        // Manually add back to inventory
+        switch (supplyType)
+        {
+            case SupplyType.MedKit:
+                SupplyManager.Instance.Inventory.medKits++;
+                break;
+            case SupplyType.RepairKit:
+                SupplyManager.Instance.Inventory.repairKits++;
+                break;
+            case SupplyType.FireExtinguisher:
+                SupplyManager.Instance.Inventory.fireExtinguishers++;
+                break;
+        }
     }
 
     private void ReleaseTargetLock(CrewAction action)
@@ -698,6 +906,23 @@ public class CrewManager : MonoBehaviour
     {
         return AllCrew.Find(c => c.Id == crewId);
     }
+    
+    /// <summary>
+    /// Public method to cancel a crew member's current action.
+    /// Used by CancelActionCommand from UI.
+    /// </summary>
+    public void CancelCrewAction(string crewId, string reason)
+    {
+        var crew = GetCrewById(crewId);
+        if (crew == null)
+        {
+            Debug.LogWarning($"[CrewManager] Cannot cancel action - crew {crewId} not found");
+            return;
+        }
+        
+        Debug.Log($"[CrewManager] CancelCrewAction called for {crew.Name}: action={crew.CurrentAction?.Type}, reason={reason}");
+        CancelCurrentAction(crew, reason);
+    }
 
     // ------------------------------------------------------
     // ACTION ASSIGNMENT
@@ -709,13 +934,15 @@ public class CrewManager : MonoBehaviour
     /// </summary>
     private void InitializeActionMovement(CrewMember crew, CrewAction action)
     {
-        Debug.Log($"[CrewManager] InitializeActionMovement: crew={crew.Id}, action={action.Type}, target={action.TargetId}, currentStation={crew.CurrentStation}");
+        Debug.Log($"[CrewManager] InitializeActionMovement: crew={crew.Id}, action={action.Type}, target={action.TargetId}, currentStation={crew.CurrentStation}, currentPos={crew.CurrentPosition}");
         
         action.Phase = ActionPhase.MoveToTarget;
         action.ReturnPosition = crew.HomePosition;
         action.TargetPosition = GetTargetPositionForAction(action);
         action.Waypoints = null;
         action.CurrentWaypointIndex = 0;
+        
+        Debug.Log($"[CrewManager] Target position resolved to: {action.TargetPosition}");
         
         // Special case: Pilot/CoPilot performing engine actions from their seat
         bool isEngineActionFromCockpit = false;
@@ -771,13 +998,22 @@ public class CrewManager : MonoBehaviour
             if (PlaneManager.Instance != null && action.Type == ActionType.Repair)
             {
                 var sys = PlaneManager.Instance.GetSystem(action.TargetId);
-                if (sys != null) sectionId = sys.SectionId;
+                if (sys != null)
+                {
+                    sectionId = sys.SectionId;
+                    Debug.Log($"[CrewManager] Repair target {action.TargetId} resolved to section: {sectionId}");
+                }
+                else
+                {
+                    Debug.LogWarning($"[CrewManager] Could not find system: {action.TargetId}");
+                }
             }
             var reg = CrewPositionRegistry.Instance;
             if (reg != null)
             {
                 action.TargetSectionId = sectionId;
                 string startSection = reg.GetNearestSectionIdByPosition(crew.CurrentPosition);
+                Debug.Log($"[CrewManager] Building path from {startSection} to {sectionId}");
                 var path = reg.GetSectionPathPositionsBetween(startSection, sectionId);
                 if (path != null && path.Count > 0)
                 {
@@ -785,6 +1021,11 @@ public class CrewManager : MonoBehaviour
                         path.RemoveAt(0);
                     action.Waypoints = path;
                     action.CurrentWaypointIndex = 0;
+                    Debug.Log($"[CrewManager] Waypoints created: {path.Count} positions");
+                }
+                else
+                {
+                    Debug.LogWarning($"[CrewManager] No path found from {startSection} to {sectionId}");
                 }
             }
         }
@@ -1033,6 +1274,20 @@ public class CrewManager : MonoBehaviour
                         if (sys != null)
                         {
                             if (_repairSectionTargets.Contains(sys.SectionId)) return false;
+                            
+                            // Cannot repair engines - only feather/restart them
+                            if (sys.Type == SystemType.Engine)
+                            {
+                                if (verboseLogging && ShouldTrace(crew)) Debug.Log($"[Trace] Reject repair: cannot repair engines targetId={action.TargetId}");
+                                return false;
+                            }
+                            
+                            // Cannot repair destroyed systems
+                            if (sys.Status == SystemStatus.Destroyed)
+                            {
+                                if (verboseLogging && ShouldTrace(crew)) Debug.Log($"[Trace] Reject repair: system is destroyed targetId={action.TargetId}");
+                                return false;
+                            }
                         }
                         else
                         {
@@ -1047,16 +1302,19 @@ public class CrewManager : MonoBehaviour
                         {
                             if (section.OnFire)
                             {
+                                Debug.LogWarning($"[CrewManager] Repair rejected: section {sectionId} is on fire");
                                 return false;
                             }
-                            if (section.Integrity >= 100)
-                            {
-                                bool systemNeedsRepair = sys != null && sys.Status != SystemStatus.Operational;
-                                if (!systemNeedsRepair)
-                                {
-                                    return false;
-                                }
-                            }
+                        }
+                        
+                        // Check if there's actually something to repair
+                        bool sectionNeedsRepair = section != null && section.Integrity < 100;
+                        bool systemNeedsRepair = sys != null && (sys.Status != SystemStatus.Operational || sys.Integrity < 100);
+                        
+                        if (!sectionNeedsRepair && !systemNeedsRepair)
+                        {
+                            Debug.LogWarning($"[CrewManager] Repair rejected: nothing needs repair (section={section?.Integrity}, system={sys?.Integrity}/{sys?.Status})");
+                            return false;
                         }
                     }
                     break;

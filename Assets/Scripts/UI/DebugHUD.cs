@@ -34,7 +34,8 @@ public class DebugHUD : MonoBehaviour
     public GameObject fireButton;
     public GameObject repairButton;
     public GameObject medicalButton;
-    public GameObject cancelActionButton;
+    public GameObject cancelActionButton;       // Cancels pending UI selection
+    public GameObject cancelCrewActionButton;   // Cancels active crew action
     
     [Header("Engine Action Buttons")]
     public GameObject extinguishEngineButton;
@@ -171,6 +172,14 @@ public class DebugHUD : MonoBehaviour
             ShowEngineInfo(OrdersUIController.Instance.LastInspectedEngineId);
             return;
         }
+        
+        // Check for inspected system (guns, radio, navigator, bombsight)
+        if (OrdersUIController.Instance != null &&
+            !string.IsNullOrEmpty(OrdersUIController.Instance.LastInspectedSystemId))
+        {
+            ShowSystemInfo(OrdersUIController.Instance.LastInspectedSystemId);
+            return;
+        }
 
         // Otherwise, if we have an inspected section, show section info
         if (OrdersUIController.Instance != null &&
@@ -284,6 +293,28 @@ public class DebugHUD : MonoBehaviour
         
         // Show contextual engine action buttons
         UpdateEngineActionButtonVisibility(true);
+    }
+    
+    private void ShowSystemInfo(string systemId)
+    {
+        var system = PlaneManager.Instance?.GetSystem(systemId);
+        if (system == null)
+        {
+            crewNameText.text = $"System: {systemId} (not found)";
+            crewStatusText.text = "";
+            crewStationText.text = "";
+            crewActionText.text = "";
+            return;
+        }
+
+        crewNameText.text = $"System: {system.Id} ({system.Type})";
+        crewStatusText.text = $"Integrity: {system.Integrity} ({system.Status})";
+        crewStationText.text = $"Section: {system.SectionId}";
+        crewActionText.text = system.OnFire ? "ON FIRE!" : "";
+        
+        // Hide all action buttons when showing system info
+        UpdateActionButtonVisibility(false);
+        UpdateEngineActionButtonVisibility(false);
     }
 
 
@@ -525,15 +556,74 @@ public class DebugHUD : MonoBehaviour
 
     private void UpdateCancelButtonVisibility()
     {
-        if (cancelActionButton == null) return;
         var ctrl = OrdersUIController.Instance;
-        bool show = ctrl != null && ctrl.PendingOrder != PendingOrderType.None;
-        cancelActionButton.SetActive(show);
+        
+        // Show cancel selection button if there's a pending UI order
+        if (cancelActionButton != null)
+        {
+            bool showPendingCancel = ctrl != null && ctrl.PendingOrder != PendingOrderType.None;
+            cancelActionButton.SetActive(showPendingCancel);
+        }
+        
+        // Show cancel crew action button if selected crew has active action
+        if (cancelCrewActionButton != null)
+        {
+            bool showCrewCancel = false;
+            if (ctrl != null && !string.IsNullOrEmpty(ctrl.SelectedCrewId))
+            {
+                var crew = CrewManager.Instance?.GetCrewById(ctrl.SelectedCrewId);
+                if (crew != null && crew.CurrentAction != null && crew.CurrentAction.Type != ActionType.Idle)
+                {
+                    showCrewCancel = true;
+                }
+            }
+            cancelCrewActionButton.SetActive(showCrewCancel);
+        }
     }
 
+    /// <summary>
+    /// Cancel pending UI action selection (when choosing action type or target)
+    /// </summary>
     public void OnCancelPendingButton()
     {
+        Debug.Log("[DebugHUD] OnCancelPendingButton - cancelling UI selection");
         OrdersUIController.Instance?.CancelPendingAction();
+        UpdateCancelButtonVisibility();
+    }
+    
+    /// <summary>
+    /// Cancel active crew action (when crew is performing action)
+    /// </summary>
+    public void OnCancelCrewActionButton()
+    {
+        Debug.Log("[DebugHUD] OnCancelCrewActionButton called!");
+        
+        var ctrl = OrdersUIController.Instance;
+        if (ctrl == null || string.IsNullOrEmpty(ctrl.SelectedCrewId))
+        {
+            Debug.LogWarning("[DebugHUD] No crew selected to cancel action");
+            return;
+        }
+        
+        var crew = CrewManager.Instance?.GetCrewById(ctrl.SelectedCrewId);
+        if (crew == null)
+        {
+            Debug.LogWarning($"[DebugHUD] Crew {ctrl.SelectedCrewId} not found");
+            return;
+        }
+        
+        if (crew.CurrentAction == null || crew.CurrentAction.Type == ActionType.Idle)
+        {
+            Debug.Log($"[DebugHUD] {crew.Name} has no action to cancel");
+            return;
+        }
+        
+        Debug.Log($"[DebugHUD] Cancelling active action for {crew.Name}: {crew.CurrentAction.Type}");
+        
+        // Directly cancel the crew's action
+        CrewManager.Instance.CancelCrewAction(crew.Id, "Player cancelled via button");
+        
+        EventLogUI.Instance?.Log($"{crew.Name}'s action cancelled - returning to station.", Color.yellow);
         UpdateCancelButtonVisibility();
     }
 }

@@ -42,6 +42,11 @@ public class DebugPanel : MonoBehaviour
         DebugManager.Instance?.DamageRandomEngine();
     }
     
+    public void OnDamageSystemButton()
+    {
+        DebugManager.Instance?.DamageRandomSystem();
+    }
+    
     public void OnDestroyEngineButton()
     {
         DebugManager.Instance?.DestroyRandomEngine();

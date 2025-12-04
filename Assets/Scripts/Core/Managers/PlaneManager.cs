@@ -48,17 +48,25 @@ public class PlaneManager : MonoBehaviour
     public event Action<float> OnFuelChanged;
 
     // Simple fire damage tuning
-    [Header("Fire Settings")]
+    [Header("Fire Settings - Section Damage")]
     [Tooltip("Damage per second to section integrity while on fire.")]
     public float fireDamagePerSecond = 2f;
     
-    [Tooltip("Chance per second for fire damage to be applied (0-1). Set to 0.33 for 33% chance per second.")]
+    [Tooltip("Chance per second for fire damage to be applied to sections (0-1). Set to 0.33 for 33% chance per second.")]
     [Range(0f, 1f)]
     public float fireDamageChancePerSecond = 1f;
 
     [Tooltip("Chance per second for fire to spread to adjacent sections (0-1).")]
     [Range(0f, 1f)]
     public float fireSpreadChancePerSecond = 0.05f;
+    
+    [Header("Fire Settings - System Damage")]
+    [Tooltip("Damage per second to systems in a section that's on fire.")]
+    public float fireSystemDamagePerSecond = 1.5f;
+    
+    [Tooltip("Chance per second for fire damage to be applied to systems (0-1).")]
+    [Range(0f, 1f)]
+    public float fireSystemDamageChancePerSecond = 0.5f;
 
     [Tooltip("Minimum integrity before a section is considered destroyed.")]
     public int destroyedIntegrityThreshold = 0;
@@ -320,6 +328,9 @@ public class PlaneManager : MonoBehaviour
                     section.FireDamageAccumulator = 0f;
                 }
             }
+            
+            // Damage systems in this section from fire (separate chance/rate)
+            DamageSystemsInSection(section, deltaTime);
 
             // Fire spread to adjacent sections
             if (fireSpreadChancePerSecond > 0f && UnityEngine.Random.value < fireSpreadChancePerSecond * deltaTime)
@@ -339,6 +350,81 @@ public class PlaneManager : MonoBehaviour
                     }
                 }
             }
+        }
+    }
+    
+    /// <summary>
+    /// Damage systems in a section that's on fire (separate from section integrity damage).
+    /// </summary>
+    private void DamageSystemsInSection(PlaneSectionState section, float deltaTime)
+    {
+        // Find all systems in this section
+        var systemsInSection = Systems.Where(s => s.SectionId == section.Id).ToList();
+        
+        foreach (var system in systemsInSection)
+        {
+            // Skip already destroyed systems
+            if (system.Status == SystemStatus.Destroyed || system.Integrity <= 0) continue;
+            
+            // Accumulate fire damage
+            system.FireDamageAccumulator += fireSystemDamagePerSecond * deltaTime;
+            
+            // When accumulated damage >= 1, roll chance to apply it
+            if (system.FireDamageAccumulator >= 1f)
+            {
+                if (UnityEngine.Random.value < fireSystemDamageChancePerSecond)
+                {
+                    int damage = Mathf.FloorToInt(system.FireDamageAccumulator);
+                    system.FireDamageAccumulator -= damage;
+                    
+                    int oldIntegrity = system.Integrity;
+                    system.Integrity = Mathf.Max(0, system.Integrity - damage);
+                    
+                    // Update system status based on new integrity
+                    UpdateSystemStatus(system);
+                    
+                    // Log on 10-point thresholds
+                    int oldThreshold = (oldIntegrity / 10) * 10;
+                    int newThreshold = (system.Integrity / 10) * 10;
+                    
+                    if (oldThreshold > newThreshold || system.Integrity <= 0)
+                    {
+                        Debug.Log($"[Plane] Fire damaged {system.Id} in {section.Id}: {oldIntegrity} -> {system.Integrity}");
+                        EventLogUI.Instance?.Log($"Fire damaged {system.Id}: {system.Integrity}%", Color.red);
+                    }
+                }
+                else
+                {
+                    system.FireDamageAccumulator = 0f;
+                }
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Update system status based on its integrity.
+    /// </summary>
+    public void UpdateSystemStatus(PlaneSystemState system)
+    {
+        SystemStatus oldStatus = system.Status;
+        
+        if (system.Integrity <= 0)
+        {
+            system.Status = SystemStatus.Destroyed;
+        }
+        else if (system.Integrity < 50)
+        {
+            system.Status = SystemStatus.Damaged;
+        }
+        else
+        {
+            system.Status = SystemStatus.Operational;
+        }
+        
+        if (system.Status != oldStatus)
+        {
+            OnSystemStatusChanged?.Invoke(system);
+            Debug.Log($"[Plane] {system.Id} status changed: {oldStatus} -> {system.Status}");
         }
     }
 
@@ -460,19 +546,27 @@ public class PlaneManager : MonoBehaviour
         var section = GetSection(system.SectionId);
         if (section == null) return false;
 
+        // Engines cannot be repaired by crew (only feathered/restarted)
+        if (system.Type == SystemType.Engine)
+        {
+            return false;
+        }
+
         // Cannot repair while section is on fire
         if (section.OnFire) return false;
 
         if (system.Status == SystemStatus.Destroyed)
         {
-            // Maybe destroyed systems can't be repaired at all
+            // Destroyed systems can't be repaired
             return false;
         }
 
-        // Simple example: any repair puts it back to Operational
-        system.Status = SystemStatus.Operational;
+        // Restore integrity and update status
+        system.Integrity = Mathf.Min(100, system.Integrity + repairAmount);
         system.Special = SpecialState.None;
-        OnSystemStatusChanged?.Invoke(system);
+        
+        // Update status based on new integrity
+        UpdateSystemStatus(system);
 
         // Also repair the section that contains this system
         TryRepairSection(system.SectionId, repairAmount);

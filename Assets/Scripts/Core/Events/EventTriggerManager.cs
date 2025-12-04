@@ -9,8 +9,8 @@ public class EventTriggerManager : MonoBehaviour
     public List<GameEvent> InlineEvents = new List<GameEvent>();
 
     [Header("Random Flavor Event Settings")] 
-    [Tooltip("Minimum seconds between random flavor events.")] public float minFlavorInterval = 45f;
-    [Tooltip("Maximum seconds between random flavor events.")] public float maxFlavorInterval = 110f;
+    [Tooltip("Minimum seconds between random flavor events.")] public float minFlavorInterval = 90f;
+    [Tooltip("Maximum seconds between random flavor events.")] public float maxFlavorInterval = 180f;
     [Tooltip("Chance to actually fire a flavor event when interval elapses.")] [Range(0f,1f)] public float flavorEventChance = 0.7f;
 
     private float _timer;

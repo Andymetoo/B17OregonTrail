@@ -29,11 +29,13 @@ public class OrdersUIController : MonoBehaviour
     [SerializeField] private string pendingTargetId;
     [SerializeField] private string lastInspectedSectionId;
     [SerializeField] private string lastInspectedEngineId;
+    [SerializeField] private string lastInspectedSystemId;
 
     public string SelectedCrewId => selectedCrewId;
     public PendingOrderType PendingOrder => pendingOrder;
     public string LastInspectedSectionId => lastInspectedSectionId;
     public string LastInspectedEngineId => lastInspectedEngineId;
+    public string LastInspectedSystemId => lastInspectedSystemId;
 
     // UI message event for pending action updates
     public System.Action<string> OnPendingActionMessage;
@@ -158,6 +160,38 @@ public class OrdersUIController : MonoBehaviour
     public void OnActionClicked_Extinguish() => OnActionClicked(PendingOrderType.ExtinguishFire);
     public void OnActionClicked_Repair() => OnActionClicked(PendingOrderType.RepairSystem);
     public void OnActionClicked_Treat() => OnActionClicked(PendingOrderType.TreatInjury);
+    
+    /// <summary>
+    /// Cancel the selected crew member's current action and return them to their station.
+    /// </summary>
+    public void OnActionClicked_Cancel()
+    {
+        if (string.IsNullOrEmpty(selectedCrewId))
+        {
+            Debug.Log("[OrdersUI] No crew selected for cancel.");
+            return;
+        }
+        
+        var crew = CrewManager.Instance?.GetCrewById(selectedCrewId);
+        if (crew == null)
+        {
+            Debug.LogWarning($"[OrdersUI] Cannot find crew {selectedCrewId} to cancel action.");
+            return;
+        }
+        
+        if (crew.CurrentAction == null)
+        {
+            Debug.Log($"[OrdersUI] {crew.Name} has no action to cancel.");
+            return;
+        }
+        
+        // Create a cancel command (which internally calls CancelCurrentAction)
+        var cancelCmd = new CancelActionCommand(selectedCrewId);
+        CrewCommandProcessor.Instance?.Enqueue(cancelCmd);
+        
+        EventLogUI.Instance?.Log($"{crew.Name}'s action cancelled - returning to station.", Color.yellow);
+        Debug.Log($"[OrdersUI] Cancelled action for {crew.Name}");
+    }
 
     /// <summary>
     /// Called when the player clicks a target:
@@ -175,6 +209,7 @@ public class OrdersUIController : MonoBehaviour
             selectedCrewId = null;
             lastInspectedSectionId = targetId;
             lastInspectedEngineId = null; // Clear engine inspection
+            lastInspectedSystemId = null; // Clear system inspection
             Debug.Log($"[OrdersUI] Inspecting section: {targetId}");
             return;
         }
@@ -213,6 +248,7 @@ public class OrdersUIController : MonoBehaviour
             selectedCrewId = null;
             lastInspectedEngineId = engineId;
             lastInspectedSectionId = null; // Clear section inspection
+            lastInspectedSystemId = null; // Clear system inspection
             Debug.Log($"[OrdersUI] Inspecting engine: {engineId}");
             return;
         }
@@ -249,7 +285,8 @@ public class OrdersUIController : MonoBehaviour
         {
             // Clear any crew selection when inspecting a system
             selectedCrewId = null;
-            lastInspectedSectionId = systemId; // Store in section ID (systems use repair flow)
+            lastInspectedSystemId = systemId; // Store in system ID
+            lastInspectedSectionId = null; // Clear section inspection
             lastInspectedEngineId = null; // Clear engine inspection
             Debug.Log($"[OrdersUI] Inspecting system: {systemId}");
             return;

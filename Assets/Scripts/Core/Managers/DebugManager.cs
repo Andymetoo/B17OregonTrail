@@ -28,6 +28,14 @@ public class DebugManager : MonoBehaviour
     [Range(0f, 1f)]
     public float engineFireChanceOnDamage = 0.3f;
     
+    [Header("System Damage")]
+    [Tooltip("Hotkey: L - Damage a random system (gun, radio, navigator, bombsight).")]
+    public KeyCode damageSystemHotkey = KeyCode.L;
+    [Tooltip("Min damage to apply to system (integrity points).")]
+    public int minSystemDamage = 15;
+    [Tooltip("Max damage to apply to system (integrity points).")]
+    public int maxSystemDamage = 40;
+    
     [Header("Altitude Control")]
     [Tooltip("Hotkey: I - Increase altitude by 1000 ft.")]
     public KeyCode increaseAltitudeHotkey = KeyCode.I;
@@ -68,6 +76,12 @@ public class DebugManager : MonoBehaviour
         if (Input.GetKeyDown(damageEngineHotkey))
         {
             DamageRandomEngine();
+        }
+        
+        // System damage
+        if (Input.GetKeyDown(damageSystemHotkey))
+        {
+            DamageRandomSystem();
         }
         
         // Altitude control
@@ -160,6 +174,44 @@ public class DebugManager : MonoBehaviour
         string fireText = engine.OnFire ? " and caught FIRE!" : "";
         EventLogUI.Instance?.Log($"[DEBUG] {engine.Id} took {damage} damage{fireText}", new Color(1f, 0.3f, 0f));
         Debug.Log($"[DebugManager] Damaged {engine.Id}: {damage} points, fire: {engine.OnFire}");
+    }
+
+    /// <summary>
+    /// Damage a random system (gun, radio, navigator, bombsight).
+    /// </summary>
+    public void DamageRandomSystem()
+    {
+        if (PlaneManager.Instance == null || PlaneManager.Instance.Systems == null || PlaneManager.Instance.Systems.Count == 0)
+        {
+            Debug.LogWarning("[DebugManager] Cannot damage system - no systems available");
+            return;
+        }
+        
+        // Get all systems that aren't already destroyed
+        var validSystems = PlaneManager.Instance.Systems
+            .Where(s => s.Integrity > 0)
+            .ToList();
+            
+        if (validSystems.Count == 0)
+        {
+            Debug.LogWarning("[DebugManager] Cannot damage system - all systems already destroyed!");
+            EventLogUI.Instance?.Log("All systems are destroyed!", Color.red);
+            return;
+        }
+        
+        // Pick random system
+        var system = validSystems[Random.Range(0, validSystems.Count)];
+        
+        // Apply damage
+        int damage = Random.Range(minSystemDamage, maxSystemDamage + 1);
+        int oldIntegrity = system.Integrity;
+        system.Integrity = Mathf.Max(0, system.Integrity - damage);
+        
+        // Update system status (automatically fires event if status changed)
+        PlaneManager.Instance.UpdateSystemStatus(system);
+        
+        EventLogUI.Instance?.Log($"[DEBUG] {system.Id} ({system.Type}) took {damage} damage - Status: {system.Status}", new Color(1f, 0.5f, 0f));
+        Debug.Log($"[DebugManager] Damaged {system.Id}: {damage} points, Integrity: {oldIntegrity} -> {system.Integrity}, Status: {system.Status}");
     }
 
     /// <summary>

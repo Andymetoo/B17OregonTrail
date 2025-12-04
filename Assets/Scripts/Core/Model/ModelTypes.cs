@@ -14,6 +14,9 @@ public class CrewMember {
 
     public float InjuryTimer; // seconds until next injury stage or death
     
+    // --- FIRE EXPOSURE TRACKING ---
+    [NonSerialized] public float? FireExposureTimer; // Tracks time exposed to fire (for injury progression)
+    
     // --- STATION ASSIGNMENT ---
     public StationType DefaultStation = StationType.None;  // Station this crew is assigned to by default
     public StationType CurrentStation = StationType.None;  // Station they are currently occupying (None if not at a station)
@@ -59,6 +62,9 @@ public class CrewAction {
     
     // --- STATION TRACKING (for temporary vacation during actions) ---
     public StationType PreviousStation = StationType.None;  // Station vacated when starting this action (to restore on return)
+    
+    // --- REPEATING ACTIONS ---
+    public bool RepeatUntilComplete = false;  // If true, action repeats until target is fully repaired/healed/extinguished
 
     public bool IsComplete => Elapsed >= Duration;
 }

@@ -13,18 +13,18 @@ MonoBehaviour:
   m_Name: DefaultCrewActionConfig
   m_EditorClassIdentifier: 
   baseMedicalDuration: 10
-  baseMedicalSuccessChance: 0.65
+  baseMedicalSuccessChance: 0.25
   medkitDuration: 3
   medkitSuccessChance: 1
   baseRepairDuration: 10
-  baseRepairSuccessChance: 0.7
+  baseRepairSuccessChance: 0.25
   baseRepairAmountMin: 10
-  baseRepairAmountMax: 30
+  baseRepairAmountMax: 20
   repairKitDuration: 4
   repairKitSuccessChance: 1
-  repairKitAmountMin: 30
-  repairKitAmountMax: 50
+  repairKitAmountMin: 50
+  repairKitAmountMax: 60
   baseExtinguishDuration: 8
-  baseExtinguishSuccessChance: 0.75
+  baseExtinguishSuccessChance: 0.25
   fireExtinguisherDuration: 2
   fireExtinguisherSuccessChance: 1

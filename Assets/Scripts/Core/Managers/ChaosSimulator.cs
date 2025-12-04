@@ -254,9 +254,14 @@ public class ChaosSimulator : MonoBehaviour
             _currentPhase = HazardPhase.Flak;
             _phaseDuration = Random.Range(flakMinDuration, flakMaxDuration);
             Debug.Log($"[Chaos] Phase transition: {previousPhase} → Flak (duration: {_phaseDuration:F1}s, weights: C={wCruise:F2} F={wFlak:F2} Fi={wFighters:F2}, roll={r:F2})");
-            EventLogUI.Instance?.Log("Flak bursts ahead!", Color.red);
-            // Pause for phase announcement - major transition
-            EventPopupUI.Instance?.Show("Flak bursts ahead!", Color.red, pause:true);
+            
+            // Only show popup if transitioning FROM a different phase
+            if (previousPhase != HazardPhase.Flak)
+            {
+                EventLogUI.Instance?.Log("Flak bursts ahead!", Color.red);
+                EventPopupUI.Instance?.Show("Flak bursts ahead!", Color.red, pause:true);
+            }
+            
             // Start with partial timer so first event fires quickly (1-3 seconds into phase)
             float hazardIntervalMean = Mathf.Lerp(eventIntervalAtSafe, eventIntervalAtDanger, danger);
             _nextHazardInterval = Random.Range(1f, 3f);
@@ -268,9 +273,14 @@ public class ChaosSimulator : MonoBehaviour
             _currentPhase = HazardPhase.Fighters;
             _phaseDuration = Random.Range(fightersMinDuration, fightersMaxDuration);
             Debug.Log($"[Chaos] Phase transition: {previousPhase} → Fighters (duration: {_phaseDuration:F1}s, weights: C={wCruise:F2} F={wFlak:F2} Fi={wFighters:F2}, roll={r:F2})");
-            EventLogUI.Instance?.Log("Enemy fighters spotted!", Color.red);
-            // Pause for phase announcement - major transition
-            EventPopupUI.Instance?.Show("Enemy fighters spotted!", Color.red, pause:true);
+            
+            // Only show popup if transitioning FROM a different phase
+            if (previousPhase != HazardPhase.Fighters)
+            {
+                EventLogUI.Instance?.Log("Enemy fighters spotted!", Color.red);
+                EventPopupUI.Instance?.Show("Enemy fighters spotted!", Color.red, pause:true);
+            }
+            
             // Start with partial timer so first event fires quickly (1-3 seconds into phase)
             float hazardIntervalMean = Mathf.Lerp(eventIntervalAtSafe, eventIntervalAtDanger, danger);
             _nextHazardInterval = Random.Range(1f, 3f);

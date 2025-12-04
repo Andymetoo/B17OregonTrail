@@ -83,7 +83,8 @@ public class ExtinguishFireCommand : CrewCommand
             Elapsed = 0f,
             SuccessChance = SuccessChance,
             UsesConsumable = UseConsumable,
-            ConsumableType = SupplyType.FireExtinguisher
+            ConsumableType = SupplyType.FireExtinguisher,
+            RepeatUntilComplete = true  // Fight fire until extinguished
         };
 
         crewMgr.TryAssignAction(CrewId, action);
@@ -141,7 +142,8 @@ public class RepairSystemCommand : CrewCommand
             SuccessChance = SuccessChance,
             UsesConsumable = UseConsumable,
             ConsumableType = SupplyType.RepairKit,
-            RepairAmount = repairAmount
+            RepairAmount = repairAmount,
+            RepeatUntilComplete = true  // Repair until fully fixed
         };
 
         crewMgr.TryAssignAction(CrewId, action);
@@ -178,7 +180,8 @@ public class TreatInjuryCommand : CrewCommand
             Elapsed = 0f,
             SuccessChance = SuccessChance,
             UsesConsumable = UseConsumable,
-            ConsumableType = SupplyType.MedKit
+            ConsumableType = SupplyType.MedKit,
+            RepeatUntilComplete = true  // Treat until fully healed
         };
 
         crewMgr.TryAssignAction(CrewId, action);
@@ -240,3 +243,32 @@ public class RestartEngineCommand : CrewCommand
     }
 }
 
+/// <summary>
+/// Cancel a crew member's current action and return them to their station.
+/// </summary>
+[Serializable]
+public class CancelActionCommand : CrewCommand
+{
+    public CancelActionCommand(string crewId) : base(crewId)
+    {
+    }
+
+    public override void Execute(CrewManager crewMgr, PlaneManager planeMgr)
+    {
+        var crew = crewMgr.GetCrewById(CrewId);
+        if (crew == null)
+        {
+            Debug.LogWarning($"[CancelActionCommand] Crew {CrewId} not found");
+            return;
+        }
+
+        if (crew.CurrentAction == null)
+        {
+            Debug.Log($"[CancelActionCommand] {crew.Name} has no action to cancel");
+            return;
+        }
+
+        // Cancel the action and return crew to station
+        crewMgr.CancelCrewAction(CrewId, "Player cancelled");
+    }
+}
