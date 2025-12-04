@@ -15,6 +15,7 @@ public class CrewStatusIndicator : MonoBehaviour
     public Image statusIndicator; // Single image that shows different sprites (injury/dead/action icons)
     public Image borderImage; // Optional colored border showing health status
     public Image stationIcon; // Shows which station this crew is assigned to
+    public Image selectionIndicator; // Visual indicator when this crew is selected (e.g., highlight border, checkmark, etc.)
     
     [Header("Status Sprites")]
     public Sprite injurySprite; // Any injury state (light/serious/critical)
@@ -43,9 +44,24 @@ public class CrewStatusIndicator : MonoBehaviour
     public Color criticalColor = Color.red;
     public Color deadColor = Color.black;
     
+    [Header("Action Icon Blink Settings")]
+    [Tooltip("Blink the action icon when crew is actively performing an action")]
+    public bool blinkActionIcon = true;
+    [Tooltip("Speed of the blink animation")]
+    public float blinkSpeed = 2f;
+    [Tooltip("Minimum alpha during blink")]
+    public float blinkMinAlpha = 0.3f;
+    
+    [Header("Selection Highlight")]
+    [Tooltip("Color tint to apply to button when this crew is selected")]
+    public Color selectedTint = new Color(1f, 1f, 0.7f, 1f); // Slight yellow tint
+    [Tooltip("Show selection indicator image when selected")]
+    public bool useSelectionIndicator = true;
+    
     private CrewMember trackedCrew;
     private Image buttonImage;
     private Color originalButtonColor;
+    private float blinkTimer = 0f;
     
     private void Start()
     {
@@ -56,6 +72,12 @@ public class CrewStatusIndicator : MonoBehaviour
             {
                 originalButtonColor = buttonImage.color;
             }
+        }
+        
+        // Hide selection indicator initially
+        if (selectionIndicator != null)
+        {
+            selectionIndicator.enabled = false;
         }
         
         // Find the crew member we're tracking
@@ -91,20 +113,35 @@ public class CrewStatusIndicator : MonoBehaviour
             return;
         }
         
+        // Check if this crew is currently selected
+        bool isSelected = false;
+        if (OrdersUIController.Instance != null)
+        {
+            isSelected = (OrdersUIController.Instance.SelectedCrewId == crewId);
+        }
+        
+        // Show/hide selection indicator
+        if (selectionIndicator != null && useSelectionIndicator)
+        {
+            selectionIndicator.enabled = isSelected;
+        }
+        
         // Update button interactability based on crew status
         bool isUsable = IsCrewUsable(trackedCrew.Status);
         // Keep buttons enabled so injured crew can be clicked as medical targets
         SetButtonInteractable(true);
         
-        // Update button transparency for unusable crew (visual feedback only)
+        // Update button appearance based on usability (no longer using selectedTint on button itself)
         if (buttonImage != null)
         {
             Color buttonColor = originalButtonColor;
+            
+            // Apply transparency for incapacitated crew
             if (!isUsable)
             {
-                // Make it slightly transparent but still clickable
                 buttonColor.a = incapacitatedAlpha;
             }
+            
             buttonImage.color = buttonColor;
         }
         
@@ -136,6 +173,7 @@ public class CrewStatusIndicator : MonoBehaviour
         // 4. Hide if healthy and idle
         
         Sprite spriteToShow = null;
+        bool isActivelyPerformingAction = false;
         
         // Check if dead/unconscious first
         if (status == CrewStatus.Dead || status == CrewStatus.Unconscious)
@@ -145,6 +183,9 @@ public class CrewStatusIndicator : MonoBehaviour
         // Check if performing an action
         else if (currentAction != null && currentAction.Type != ActionType.Idle)
         {
+            // Check if they're in the Performing phase (actively working, not moving)
+            isActivelyPerformingAction = (currentAction.Phase == ActionPhase.Performing);
+            
             spriteToShow = currentAction.Type switch
             {
                 ActionType.Repair => repairSprite,
@@ -165,6 +206,24 @@ public class CrewStatusIndicator : MonoBehaviour
         {
             statusIndicator.enabled = true;
             statusIndicator.sprite = spriteToShow;
+            
+            // Apply blinking effect if actively performing an action
+            if (isActivelyPerformingAction && blinkActionIcon)
+            {
+                blinkTimer += Time.deltaTime * blinkSpeed;
+                float alpha = Mathf.Lerp(blinkMinAlpha, 1f, (Mathf.Sin(blinkTimer) + 1f) / 2f);
+                
+                Color iconColor = statusIndicator.color;
+                iconColor.a = alpha;
+                statusIndicator.color = iconColor;
+            }
+            else
+            {
+                // Reset alpha to full when not performing
+                Color iconColor = statusIndicator.color;
+                iconColor.a = 1f;
+                statusIndicator.color = iconColor;
+            }
         }
         else
         {

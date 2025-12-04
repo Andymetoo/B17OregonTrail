@@ -54,11 +54,18 @@ public class CrewVisualizer : MonoBehaviour
     private RectTransform rectTransform;
     private CrewMember crew;
     private bool snappedToStart = false;
+    private RectTransform actionProgressUIRect; // Cache the progress UI rect for counter-flipping
     
     private void Awake()
     {
         image = GetComponent<Image>();
         rectTransform = GetComponent<RectTransform>();
+        
+        // Cache action progress UI rect if it exists
+        if (actionProgressUI != null)
+        {
+            actionProgressUIRect = actionProgressUI.GetComponent<RectTransform>();
+        }
     }
     
     private void Start()
@@ -106,6 +113,14 @@ public class CrewVisualizer : MonoBehaviour
             var scale = rectTransform.localScale;
             scale.x = dx >= 0 ? Mathf.Abs(scale.x) : -Mathf.Abs(scale.x);
             rectTransform.localScale = scale;
+            
+            // Counter-flip the action progress UI so it stays upright
+            if (actionProgressUIRect != null)
+            {
+                var uiScale = actionProgressUIRect.localScale;
+                uiScale.x = dx >= 0 ? Mathf.Abs(uiScale.x) : -Mathf.Abs(uiScale.x);
+                actionProgressUIRect.localScale = uiScale;
+            }
         }
 
         UpdateSprite();

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public enum PendingOrderType
@@ -30,6 +31,12 @@ public class OrdersUIController : MonoBehaviour
     [SerializeField] private string lastInspectedSectionId;
     [SerializeField] private string lastInspectedEngineId;
     [SerializeField] private string lastInspectedSystemId;
+    
+    [Header("Contextual Clicking")]
+    [SerializeField] private string lastClickedSectionId; // Track which section was last clicked
+    [SerializeField] private float lastClickTime; // Time of last click
+    [SerializeField] private float multiClickWindow = 0.5f; // Time window for multi-click detection
+    [SerializeField] private int crewCycleIndex = -1; // Current index in crew cycle for the section
 
     public string SelectedCrewId => selectedCrewId;
     public PendingOrderType PendingOrder => pendingOrder;
@@ -199,28 +206,78 @@ public class OrdersUIController : MonoBehaviour
     /// - section (for ExtinguishFire)
     /// - system (for RepairSystem)
     /// - crew (for TreatInjury)
+    /// - Contextual crew selection by cycling through crew in the section
     /// </summary>
     public void OnTargetClicked(string targetId)
     {
-        // If we don't have a pending order, treat this as an inspect
+        // Check if this is a multi-click on the same section for crew cycling
+        bool isMultiClick = (targetId == lastClickedSectionId) && 
+                           (Time.time - lastClickTime < multiClickWindow);
+        
+        lastClickedSectionId = targetId;
+        lastClickTime = Time.time;
+        
+        // If we don't have a pending order, this could be inspect or crew selection
         if (pendingOrder == PendingOrderType.None)
         {
-            // Clear any crew selection when inspecting a section to show section stats
+            // Get crew members in this section
+            var crewInSection = GetCrewInSection(targetId);
+            
+            // If multi-clicking and there are crew in this section, cycle through them
+            if (isMultiClick && crewInSection.Count > 0)
+            {
+                crewCycleIndex = (crewCycleIndex + 1) % (crewInSection.Count + 1); // +1 to include section itself
+                
+                if (crewCycleIndex < crewInSection.Count)
+                {
+                    // Select crew member
+                    string crewId = crewInSection[crewCycleIndex].Id;
+                    OnCrewClicked(crewId);
+                    Debug.Log($"[OrdersUI] Multi-click: Selected crew {crewInSection[crewCycleIndex].Name} in section {targetId}");
+                    return;
+                }
+                else
+                {
+                    // Cycle back to section inspection
+                    Debug.Log($"[OrdersUI] Multi-click: Cycled back to section inspection for {targetId}");
+                }
+            }
+            else
+            {
+                // First click or different section - reset cycle
+                crewCycleIndex = crewInSection.Count; // Start at section inspection
+            }
+            
+            // Default: Inspect the section
             selectedCrewId = null;
             lastInspectedSectionId = targetId;
-            lastInspectedEngineId = null; // Clear engine inspection
-            lastInspectedSystemId = null; // Clear system inspection
+            lastInspectedEngineId = null;
+            lastInspectedSystemId = null;
             Debug.Log($"[OrdersUI] Inspecting section: {targetId}");
             return;
         }
 
-        // Medical must target a crew, not a section/station
+        // Medical: Smart targeting - find injured crew in this section
         if (pendingOrder == PendingOrderType.TreatInjury)
         {
-            OnPendingActionMessage?.Invoke("Select an injured crew member to treat.");
-            EventLogUI.Instance?.Log("Medical requires clicking an injured crew, not a section.", Color.red);
-            Debug.Log("[OrdersUI] Ignoring non-crew target for medical.");
-            return;
+            var injuredCrewInSection = GetInjuredCrewInSection(targetId);
+            
+            if (injuredCrewInSection.Count > 0)
+            {
+                // Select the most injured crew member
+                var mostInjured = GetMostInjuredCrew(injuredCrewInSection);
+                pendingTargetId = mostInjured.Id;
+                Debug.Log($"[OrdersUI] Smart medical targeting: Selected {mostInjured.Name} (Status: {mostInjured.Status}) in section {targetId}");
+                TryCommitOrder();
+                return;
+            }
+            else
+            {
+                OnPendingActionMessage?.Invoke("No injured crew in that section.");
+                EventLogUI.Instance?.Log("No injured crew in that section.", Color.red);
+                Debug.Log($"[OrdersUI] No injured crew found in section {targetId}");
+                return;
+            }
         }
 
         if (string.IsNullOrEmpty(selectedCrewId))
@@ -414,6 +471,95 @@ public class OrdersUIController : MonoBehaviour
             return;
         }
 
+        // Validate target before showing consumable popup
+        if (pendingOrder == PendingOrderType.RepairSystem)
+        {
+            // Check if it's a section
+            var section = PlaneManager.Instance?.GetSection(pendingTargetId);
+            if (section != null)
+            {
+                // Validate section
+                if (section.Integrity >= 100)
+                {
+                    EventLogUI.Instance?.Log($"{pendingTargetId} is already at full integrity.", Color.red);
+                    OnPendingActionMessage?.Invoke($"{pendingTargetId} doesn't need repairs.");
+                    CancelPendingAction();
+                    return;
+                }
+                if (section.OnFire)
+                {
+                    EventLogUI.Instance?.Log($"{pendingTargetId} is on fire - extinguish first.", Color.red);
+                    OnPendingActionMessage?.Invoke("Can't repair while on fire.");
+                    CancelPendingAction();
+                    return;
+                }
+                if (section.Integrity <= PlaneManager.Instance.destroyedIntegrityThreshold)
+                {
+                    EventLogUI.Instance?.Log($"{pendingTargetId} is destroyed and cannot be repaired.", Color.red);
+                    OnPendingActionMessage?.Invoke($"{pendingTargetId} is destroyed.");
+                    CancelPendingAction();
+                    return;
+                }
+            }
+            else
+            {
+                // Check if it's a system (gun, radio, etc.)
+                var system = PlaneManager.Instance?.GetSystem(pendingTargetId);
+                if (system == null)
+                {
+                    EventLogUI.Instance?.Log($"{pendingTargetId} not found.", Color.red);
+                    OnPendingActionMessage?.Invoke("Invalid repair target.");
+                    CancelPendingAction();
+                    return;
+                }
+                if (system.Integrity >= 100)
+                {
+                    EventLogUI.Instance?.Log($"{pendingTargetId} is already at full integrity.", Color.red);
+                    OnPendingActionMessage?.Invoke($"{pendingTargetId} doesn't need repairs.");
+                    CancelPendingAction();
+                    return;
+                }
+            }
+        }
+        
+        if (pendingOrder == PendingOrderType.ExtinguishFire)
+        {
+            var section = PlaneManager.Instance?.GetSection(pendingTargetId);
+            if (section == null)
+            {
+                EventLogUI.Instance?.Log($"Section {pendingTargetId} not found.", Color.red);
+                OnPendingActionMessage?.Invoke("Invalid target.");
+                CancelPendingAction();
+                return;
+            }
+            if (!section.OnFire)
+            {
+                EventLogUI.Instance?.Log($"{pendingTargetId} is not on fire.", Color.red);
+                OnPendingActionMessage?.Invoke($"{pendingTargetId} is not on fire.");
+                CancelPendingAction();
+                return;
+            }
+        }
+        
+        if (pendingOrder == PendingOrderType.TreatInjury)
+        {
+            var target = CrewManager.Instance?.GetCrewById(pendingTargetId);
+            if (target == null)
+            {
+                EventLogUI.Instance?.Log("Select an injured crew to treat (not a section).", Color.red);
+                OnPendingActionMessage?.Invoke("Select an injured crew member.");
+                CancelPendingAction();
+                return;
+            }
+            if (target.Status == CrewStatus.Healthy)
+            {
+                EventLogUI.Instance?.Log($"{target.Name} is not injured.", Color.red);
+                OnPendingActionMessage?.Invoke($"{target.Name} is not injured.");
+                CancelPendingAction();
+                return;
+            }
+        }
+
         // Check if we should show consumable choice popup
         bool hasConsumable = false;
         SupplyType consumableType = SupplyType.MedKit;
@@ -551,20 +697,6 @@ public class OrdersUIController : MonoBehaviour
 
             case PendingOrderType.TreatInjury:
             {
-                // Validate target is a crew and is injured
-                var target = CrewManager.Instance?.GetCrewById(pendingTargetId);
-                if (target == null)
-                {
-                    EventLogUI.Instance?.Log("Select an injured crew to treat (not a section).", Color.red);
-                    OnPendingActionMessage?.Invoke("Select an injured crew member.");
-                    return;
-                }
-                if (target.Status == CrewStatus.Healthy)
-                {
-                    EventLogUI.Instance?.Log($"{target.Name} is not injured.", Color.red);
-                    OnPendingActionMessage?.Invoke($"{target.Name} is not injured.");
-                    return;
-                }
                 float baseDuration = CrewManager.Instance != null ? CrewManager.Instance.medicalActionDuration : 10f;
                 float duration = useConsumable 
                     ? (upgrades != null ? upgrades.GetModifiedMedkitDuration() : config.medkitDuration)
@@ -618,5 +750,89 @@ public class OrdersUIController : MonoBehaviour
         // Reset order state
         pendingOrder = PendingOrderType.None;
         pendingTargetId = null;
+    }
+    
+    // ============================
+    // Contextual Clicking Helpers
+    // ============================
+    
+    /// <summary>
+    /// Gets all crew members currently in the specified section.
+    /// </summary>
+    private List<CrewMember> GetCrewInSection(string sectionId)
+    {
+        var result = new List<CrewMember>();
+        
+        if (CrewManager.Instance == null)
+            return result;
+        
+        foreach (var crew in CrewManager.Instance.AllCrew)
+        {
+            // Get the section the crew is currently in
+            string crewSectionId = CrewPositionRegistry.Instance?.GetNearestSectionIdByPosition(crew.CurrentPosition);
+            
+            if (crewSectionId == sectionId)
+            {
+                result.Add(crew);
+            }
+        }
+        
+        return result;
+    }
+    
+    /// <summary>
+    /// Gets all injured crew members in the specified section.
+    /// </summary>
+    private List<CrewMember> GetInjuredCrewInSection(string sectionId)
+    {
+        var result = new List<CrewMember>();
+        
+        var crewInSection = GetCrewInSection(sectionId);
+        
+        foreach (var crew in crewInSection)
+        {
+            if (crew.Status == CrewStatus.Light || 
+                crew.Status == CrewStatus.Serious || 
+                crew.Status == CrewStatus.Critical)
+            {
+                result.Add(crew);
+            }
+        }
+        
+        return result;
+    }
+    
+    /// <summary>
+    /// Returns the most injured crew member from the list.
+    /// Priority: Critical > Serious > Light
+    /// </summary>
+    private CrewMember GetMostInjuredCrew(List<CrewMember> injuredCrew)
+    {
+        if (injuredCrew == null || injuredCrew.Count == 0)
+            return null;
+        
+        // First, look for Critical
+        foreach (var crew in injuredCrew)
+        {
+            if (crew.Status == CrewStatus.Critical)
+                return crew;
+        }
+        
+        // Then Serious
+        foreach (var crew in injuredCrew)
+        {
+            if (crew.Status == CrewStatus.Serious)
+                return crew;
+        }
+        
+        // Finally Light
+        foreach (var crew in injuredCrew)
+        {
+            if (crew.Status == CrewStatus.Light)
+                return crew;
+        }
+        
+        // Fallback (shouldn't reach here if injuredCrew is filtered properly)
+        return injuredCrew[0];
     }
 }

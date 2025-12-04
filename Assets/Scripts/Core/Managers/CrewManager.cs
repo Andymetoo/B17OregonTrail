@@ -835,11 +835,39 @@ public class CrewManager : MonoBehaviour
         }
         else
         {
-            // Home is safe - return there
+            // Home is safe - walk back there
+            // Get the section crew is currently in (reuse homeSectionId already defined above)
+            string currentSectionId = CrewPositionRegistry.Instance?.GetNearestSectionIdByPosition(crew.CurrentPosition);
+            
+            // Create a simple action to walk home
+            if (!string.IsNullOrEmpty(currentSectionId) && !string.IsNullOrEmpty(homeSectionId) && currentSectionId != homeSectionId)
+            {
+                // Create waypoints back home using the pathfinding
+                var path = CrewPositionRegistry.Instance?.GetSectionPathPositionsBetween(currentSectionId, homeSectionId);
+                if (path != null && path.Count > 0)
+                {
+                    // Create a Move action to return home
+                    var returnAction = new CrewAction
+                    {
+                        Type = ActionType.Move,
+                        Phase = ActionPhase.MoveToTarget,
+                        TargetPosition = crew.HomePosition,
+                        ReturnPosition = crew.HomePosition,
+                        Waypoints = path,
+                        CurrentWaypointIndex = 0
+                    };
+                    crew.CurrentAction = returnAction;
+                    crew.VisualState = CrewVisualState.Moving;
+                    Debug.Log($"[CrewManager] {crew.Name} returning home via path ({path.Count} waypoints)");
+                    return; // Exit early since we're setting up movement
+                }
+            }
+            
+            // No path needed or already at home - just snap to home position
             crew.CurrentPosition = crew.HomePosition;
+            crew.VisualState = CrewVisualState.IdleAtStation;
         }
         
-        crew.VisualState = CrewVisualState.IdleAtStation;
         crew.CurrentAction = null;
         OnCrewActionCancelled?.Invoke(crew);
         ReleaseTargetLock(action);
@@ -1244,8 +1272,28 @@ public class CrewManager : MonoBehaviour
         }
         if (crew.CurrentAction != null)
         {
-            if (verboseLogging && ShouldTrace(crew)) Debug.Log($"[Trace] Reject assign (already has action) crew={crew.Id} currentType={crew.CurrentAction.Type} phase={crew.CurrentAction.Phase}");
-            return false;
+            // Allow replacing a "return home" Move action (created by cancellation) with a new action
+            bool isReturningHome = crew.CurrentAction.Type == ActionType.Move && 
+                                   crew.CurrentAction.TargetPosition == crew.HomePosition;
+            
+            if (isReturningHome)
+            {
+                // Cancel the return-home movement and allow the new action
+                Debug.Log($"[CrewManager] Replacing return-home Move action with new action for {crew.Name}");
+                crew.CurrentAction = null; // Clear the move action
+            }
+            else
+            {
+                // For any other active action, allow interruption by cancelling it first
+                Debug.Log($"[CrewManager] Interrupting {crew.CurrentAction.Type} action to assign new {action.Type} action for {crew.Name}");
+                CancelCurrentAction(crew, $"Interrupted to perform {action.Type}");
+                
+                // After cancellation, if crew is now walking home, clear that too
+                if (crew.CurrentAction != null && crew.CurrentAction.Type == ActionType.Move)
+                {
+                    crew.CurrentAction = null;
+                }
+            }
         }
 
         // Enforce exclusive target locks
