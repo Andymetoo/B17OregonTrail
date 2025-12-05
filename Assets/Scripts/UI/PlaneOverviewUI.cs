@@ -156,8 +156,6 @@ public class PlaneOverviewUI : MonoBehaviour
         if (generalText != null)
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"<size={titleSize}><b><color={titleColorHex}>INFO</color></b></size>");
-            sb.AppendLine("────────────");
             GenerateGeneralSection(sb);
             sb.AppendLine("\n<size=10><i><color=#FFFF88>Click to close</color></i></size>");
             generalText.text = sb.ToString();
@@ -324,16 +322,12 @@ public class PlaneOverviewUI : MonoBehaviour
             return;
         }
         
-        sb.AppendLine($"⛽ {PlaneManager.Instance.FuelRemaining:F0}");
-        sb.AppendLine($"✈ {PlaneManager.Instance.CurrentCruiseSpeedMph:F0}mph");
-        sb.AppendLine($"▲ {PlaneManager.Instance.currentAltitudeFeet:F0}ft");
+        // Horizontal layout: Fuel, Speed, Alt on one line; Supplies on next line
+        sb.AppendLine($"Fuel: {PlaneManager.Instance.FuelRemaining:F0} | Speed: {PlaneManager.Instance.CurrentCruiseSpeedMph:F0}mph | Alt: {PlaneManager.Instance.currentAltitudeFeet:F0}ft");
         
         if (SupplyManager.Instance != null)
         {
-            sb.AppendLine();
-            sb.AppendLine($"⚕ {SupplyManager.Instance.Inventory.GetCount(SupplyType.MedKit)}");
-            sb.AppendLine($"🔧 {SupplyManager.Instance.Inventory.GetCount(SupplyType.RepairKit)}");
-            sb.AppendLine($"🔥 {SupplyManager.Instance.Inventory.GetCount(SupplyType.FireExtinguisher)}");
+            sb.AppendLine($"Medkits: {SupplyManager.Instance.Inventory.GetCount(SupplyType.MedKit)} | RepairKits: {SupplyManager.Instance.Inventory.GetCount(SupplyType.RepairKit)} | FireExt: {SupplyManager.Instance.Inventory.GetCount(SupplyType.FireExtinguisher)}");
         }
     }
 
